@@ -251,4 +251,119 @@ class ToolRegistryTest extends TestCase {
 
         $this->assertNotContains( 'bad_schema', array_column( $this->registry()->specs(), 'name' ) );
     }
+
+    // ── personal-data tools: central login gate (defense in depth) ────────────
+
+    /**
+     * Register a tool flagged `'personal' => true` via the extension filter. The
+     * callback flips $invoked so a test can assert whether dispatch() reached it.
+     *
+     * @param bool &$invoked Set true by the callback when (and only when) it runs.
+     */
+    private function register_personal_tool( bool &$invoked ): void {
+        Functions\when( 'apply_filters' )->alias( function ( $hook, $tools ) use ( &$invoked ) {
+            if ( 'fahad_ai_register_tools' === $hook ) {
+                $tools[] = [
+                    'name'        => 'order_status',
+                    'description' => 'Look up the caller\'s most recent order status.',
+                    'parameters'  => [ 'type' => 'object', 'properties' => new stdClass() ],
+                    'personal'    => true,
+                    'callback'    => function ( array $input ) use ( &$invoked ): array {
+                        $invoked = true;
+                        return [ 'status' => 'Shipped' ];
+                    },
+                ];
+            }
+            return $tools;
+        } );
+    }
+
+    /**
+     * GUEST-BLOCK (headline acceptance criterion): a personal-flagged tool must
+     * be gated centrally. When the caller is a guest, dispatch() returns the
+     * login-required error and the callback is NEVER invoked — a personal tool
+     * cannot leak by forgetting to check login itself.
+     */
+    public function test_personal_tool_blocks_guest_and_never_invokes_callback(): void {
+        Functions\when( 'is_user_logged_in' )->justReturn( false );
+
+        $invoked = false;
+        $this->register_personal_tool( $invoked );
+
+        $result = $this->registry()->dispatch( 'order_status', [] );
+
+        $this->assertFalse( $invoked, 'guest reached a personal tool callback — login gate failed' );
+        $this->assertArrayHasKey( 'requires_login', $result );
+        $this->assertTrue( $result['requires_login'] );
+        $this->assertArrayHasKey( 'error', $result );
+        // The block is the login gate, not an "unknown tool" miss.
+        $this->assertStringNotContainsString( 'Unknown tool', $result['error'] );
+    }
+
+    /**
+     * For a logged-in caller the central gate is satisfied, so dispatch() proceeds
+     * to the personal tool's callback exactly like a normal tool. (Per-RECORD
+     * ownership is still the callback's job — see Fahad_AI_Auth::user_owns.)
+     */
+    public function test_personal_tool_runs_for_logged_in_user(): void {
+        Functions\when( 'is_user_logged_in' )->justReturn( true );
+
+        $invoked = false;
+        $this->register_personal_tool( $invoked );
+
+        $result = $this->registry()->dispatch( 'order_status', [] );
+
+        $this->assertTrue( $invoked, 'logged-in user did not reach the personal tool callback' );
+        $this->assertSame( 'Shipped', $result['status'] );
+        $this->assertArrayNotHasKey( 'requires_login', $result );
+    }
+
+    /**
+     * A NON-personal (normal) tool must be unaffected by the gate: a guest can
+     * still call it. We register a normal tool and dispatch it as a guest — the
+     * callback runs and no login error is returned.
+     */
+    public function test_non_personal_tool_is_not_login_gated_for_guests(): void {
+        Functions\when( 'is_user_logged_in' )->justReturn( false );
+
+        $invoked = false;
+        Functions\when( 'apply_filters' )->alias( function ( $hook, $tools ) use ( &$invoked ) {
+            if ( 'fahad_ai_register_tools' === $hook ) {
+                $tools[] = [
+                    'name'        => 'store_hours',
+                    'description' => 'Public store hours — no login needed.',
+                    'parameters'  => [ 'type' => 'object', 'properties' => new stdClass() ],
+                    'callback'    => function ( array $input ) use ( &$invoked ): array {
+                        $invoked = true;
+                        return [ 'hours' => '9-5' ];
+                    },
+                ];
+            }
+            return $tools;
+        } );
+
+        $result = $this->registry()->dispatch( 'store_hours', [] );
+
+        $this->assertTrue( $invoked, 'a non-personal tool was wrongly gated' );
+        $this->assertSame( '9-5', $result['hours'] );
+        $this->assertArrayNotHasKey( 'requires_login', $result );
+    }
+
+    /**
+     * The declarative `personal` flag is an internal authorization detail and must
+     * NOT be advertised to the model: specs() exposes only name/description/
+     * parameters (the existing contract), never the flag or the callback.
+     */
+    public function test_personal_flag_is_not_leaked_by_specs(): void {
+        $invoked = false;
+        $this->register_personal_tool( $invoked );
+
+        $spec = array_column( $this->registry()->specs(), null, 'name' )['order_status'];
+
+        $this->assertArrayHasKey( 'name', $spec );
+        $this->assertArrayHasKey( 'description', $spec );
+        $this->assertArrayHasKey( 'parameters', $spec );
+        $this->assertArrayNotHasKey( 'personal', $spec );
+        $this->assertArrayNotHasKey( 'callback', $spec );
+    }
 }
