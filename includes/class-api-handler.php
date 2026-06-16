@@ -63,7 +63,10 @@ final class Fahad_AI_API_Handler {
 		$comparison = [];
 
 		for ( $i = 0; $i < $max; $i++ ) {
-			$response = $this->call_anthropic( $messages );
+			// Cost/latency: bound the outgoing context to the configured token budget
+			// (drops only the oldest non-essential history; the in-progress tool loop
+			// and the latest turn are preserved). No-op by default (budget 0).
+			$response = $this->call_anthropic( $this->apply_token_budget( $messages ), $i );
 
 			if ( is_wp_error( $response ) ) {
 				return $response;
@@ -91,13 +94,17 @@ final class Fahad_AI_API_Handler {
 					if ( ( $block['type'] ?? '' ) !== 'tool_use' ) {
 						continue;
 					}
+					// Sequence per tool call: execute → surface cards from the FULL
+					// result → TRIM the result → append the trimmed copy to the model
+					// messages. Cards/comparison use the FULL result; only the model
+					// copy is trimmed (issue #23).
 					$result         = $tools->execute( $block['name'], $block['input'] ?? [] );
 					$cards          = array_merge( $cards, $this->tool_result_cards( $block['name'], $result ) );
 					$comparison     = $this->tool_result_comparison( $block['name'], $result ) ?: $comparison;
 					$tool_results[] = [
 						'type'        => 'tool_result',
 						'tool_use_id' => $block['id'],
-						'content'     => wp_json_encode( $result ),
+						'content'     => wp_json_encode( $this->trim_tool_result( $block['name'], $result ) ),
 					];
 				}
 
@@ -111,20 +118,28 @@ final class Fahad_AI_API_Handler {
 		return new WP_Error( 'agent_loop', __( 'Agent exceeded maximum iterations.', 'fahad-ai-shopping-assistant-for-woocommerce' ), [ 'status' => 500 ] );
 	}
 
-	private function call_anthropic( array $messages ): array|WP_Error {
+	private function call_anthropic( array $messages, int $iteration = 0 ): array|WP_Error {
 		$api_key = get_option( 'fahad_ai_anthropic_api_key', '' );
 
 		if ( empty( $api_key ) ) {
 			return new WP_Error( 'no_api_key', __( 'Anthropic API key is not configured.', 'fahad-ai-shopping-assistant-for-woocommerce' ), [ 'status' => 500 ] );
 		}
 
-		$model = get_option( 'fahad_ai_anthropic_model', 'claude-haiku-4-5-20251001' );
+		$tools = $this->get_anthropic_tools();
+
+		// Model routing (issue #23): default is the configured model unchanged; a
+		// fahad_ai_model hook may route a simple vs. reasoning turn to a different model.
+		$model = $this->resolve_model(
+			get_option( 'fahad_ai_anthropic_model', 'claude-haiku-4-5-20251001' ),
+			'anthropic',
+			[ 'has_tools' => ! empty( $tools ), 'iteration' => $iteration ]
+		);
 
 		$payload = [
 			'model'      => $model,
 			'max_tokens' => 1024,
 			'system'     => $this->get_system_prompt(),
-			'tools'      => $this->get_anthropic_tools(),
+			'tools'      => $tools,
 			'messages'   => $messages,
 		];
 
@@ -174,7 +189,10 @@ final class Fahad_AI_API_Handler {
 		);
 
 		for ( $i = 0; $i < $max; $i++ ) {
-			$response = $this->call_moonshot( $with_system );
+			// Cost/latency: bound the outgoing context to the configured token budget
+			// (no-op by default). The system message + latest turn + in-progress tool
+			// loop are preserved; only the oldest history is condensed.
+			$response = $this->call_moonshot( $this->apply_token_budget( $with_system ), $i );
 
 			if ( is_wp_error( $response ) ) {
 				return $response;
@@ -202,6 +220,9 @@ final class Fahad_AI_API_Handler {
 					$name  = $call['function']['name']      ?? '';
 					$input = json_decode( $call['function']['arguments'] ?? '{}', true ) ?? [];
 
+					// Sequence per tool call: execute → surface cards from the FULL
+					// result → TRIM → append the trimmed copy to the model messages
+					// (issue #23). Cards/comparison use the FULL result.
 					$result     = $tools->execute( $name, $input );
 					$cards      = array_merge( $cards, $this->tool_result_cards( $name, $result ) );
 					$comparison = $this->tool_result_comparison( $name, $result ) ?: $comparison;
@@ -209,7 +230,7 @@ final class Fahad_AI_API_Handler {
 					$tool_msg = [
 						'role'         => 'tool',
 						'tool_call_id' => $call['id'],
-						'content'      => wp_json_encode( $result ),
+						'content'      => wp_json_encode( $this->trim_tool_result( $name, $result ) ),
 					];
 
 					$with_system[] = $tool_msg;
@@ -224,20 +245,27 @@ final class Fahad_AI_API_Handler {
 		return new WP_Error( 'agent_loop', __( 'Agent exceeded maximum iterations.', 'fahad-ai-shopping-assistant-for-woocommerce' ), [ 'status' => 500 ] );
 	}
 
-	private function call_moonshot( array $messages ): array|WP_Error {
+	private function call_moonshot( array $messages, int $iteration = 0 ): array|WP_Error {
 		$api_key = get_option( 'fahad_ai_moonshot_api_key', '' );
 
 		if ( empty( $api_key ) ) {
 			return new WP_Error( 'no_api_key', __( 'Moonshot API key is not configured.', 'fahad-ai-shopping-assistant-for-woocommerce' ), [ 'status' => 500 ] );
 		}
 
-		$model = get_option( 'fahad_ai_moonshot_model', 'kimi-k2.6' );
+		$tools = $this->get_openai_tools();
+
+		// Model routing (issue #23): default unchanged; a fahad_ai_model hook may route.
+		$model = $this->resolve_model(
+			get_option( 'fahad_ai_moonshot_model', 'kimi-k2.6' ),
+			'moonshot',
+			[ 'has_tools' => ! empty( $tools ), 'iteration' => $iteration ]
+		);
 
 		$payload = [
 			'model'      => $model,
 			'max_tokens' => 1024,
 			'messages'   => $messages,
-			'tools'      => $this->get_openai_tools(),
+			'tools'      => $tools,
 		];
 
 		$response = wp_remote_post( $this->moonshot_base_url() . '/v1/chat/completions', [
@@ -368,6 +396,235 @@ Guidelines:
 
 		/** This filter is documented above (for the custom-prompt branch). */
 		return apply_filters( 'fahad_ai_system_prompt', $prompt );
+	}
+
+	// =========================================================================
+	// Cost & latency controls (issue #23)
+	// =========================================================================
+
+	/**
+	 * Heavy product fields the MODEL does not need to reason or answer. Dropped from
+	 * the COPY of a tool result appended to the model's message history (never from
+	 * the widget card payload, which is built from the FULL result first).
+	 *
+	 * The kept essentials are deliberately conservative: name + price (grounding),
+	 * id (so the model can act on it), in_stock + on_sale (availability reasoning).
+	 * Everything in this list is bulky and card-only (images, descriptions, the
+	 * regular/sale split the card renders, the product URL the card links to).
+	 *
+	 * @var string[]
+	 */
+	private const TRIM_DROP_PRODUCT_FIELDS = [
+		'image',
+		'short_description',
+		'description',
+		'regular_price',
+		'sale_price',
+		'url',
+	];
+
+	/**
+	 * Trim a tool result to the essentials the MODEL needs, returning a COPY.
+	 *
+	 * The full tool result is JSON-encoded and appended to the model's message
+	 * history every turn — and product results carry up to ten products, each with
+	 * an image URL, long descriptions and a regular/sale price split that only the
+	 * widget card uses. This shrinks the copy fed to the model (fewer tokens → lower
+	 * bill + latency) WITHOUT touching the data used for cards.
+	 *
+	 * CRITICAL SEPARATION (see the agent loops): cards are built and surfaced from
+	 * the FULL result BEFORE this runs; only the value appended to the model
+	 * messages is trimmed. This method must not mutate its input — it builds a new
+	 * array — so the caller's full result (held for card emission) is unchanged.
+	 *
+	 * Tool-aware and SAFE (when unsure, keep it — grounding beats savings):
+	 *   - products[] results (search / best-sellers / recommendations): each product
+	 *     is reduced to the kept essentials; other top-level scalars (found, message)
+	 *     pass through.
+	 *   - comparison results (products[] + aligned attributes[]): the per-product
+	 *     columns are trimmed, but the attribute ROWS are kept verbatim — the model
+	 *     reasons over them and the answer references them.
+	 *   - a single product-shaped result (id + name) is trimmed SUBTRACTIVELY: only
+	 *     the heavy product fields are dropped, every OTHER field is kept (so a
+	 *     reviews result's snippets, a detail result's variations/sku/categories,
+	 *     etc. — which the model legitimately summarises — survive).
+	 *   - everything else (cart actions with their cart_url/checkout_url/message/
+	 *     totals, errors, requires_login, shipping rates, …) passes through unchanged.
+	 *
+	 * Filterable so it can be tuned or disabled:
+	 *   apply_filters( 'fahad_ai_trim_tool_result', array $trimmed, string $tool, array $full )
+	 *
+	 * @param string $tool   Name of the tool that produced the result.
+	 * @param array  $full   The FULL tool result (must NOT be mutated here).
+	 * @return array The trimmed copy to append to the model's message history.
+	 */
+	private function trim_tool_result( string $tool, array $full ): array {
+		$trimmed = $full;
+
+		if ( ! empty( $full['products'] ) && is_array( $full['products'] ) ) {
+			// products[] (search / best-sellers / recommendations / comparison columns).
+			$trimmed['products'] = array_map( [ $this, 'trim_product_summary' ], $full['products'] );
+			// Comparison attribute rows are kept verbatim above (carried by $trimmed
+			// = $full and not overwritten); nothing else to do.
+		} elseif ( ! empty( $full['id'] ) && ! empty( $full['name'] ) ) {
+			// A single product-shaped result: subtractive trim (drop heavy fields,
+			// keep every other field — reviews/variations/etc. the model summarises).
+			foreach ( self::TRIM_DROP_PRODUCT_FIELDS as $field ) {
+				unset( $trimmed[ $field ] );
+			}
+		}
+		// else: cart actions, errors, shipping, category lists, … pass through whole.
+
+		/**
+		 * Filter the trimmed tool result appended to the model's message history (issue #23).
+		 *
+		 * Lets a site tune which fields the model sees (cost/latency vs. context) or
+		 * disable trimming entirely by returning $full. The widget card payload is
+		 * unaffected — it is built from $full before the trim — so this only changes
+		 * what the MODEL reads, never what the customer sees.
+		 *
+		 * @param array  $trimmed The trimmed result that will be sent to the model.
+		 * @param string $tool    The tool that produced the result.
+		 * @param array  $full    The full, untrimmed result (also used for cards).
+		 */
+		$result = apply_filters( 'fahad_ai_trim_tool_result', $trimmed, $tool, $full );
+
+		return is_array( $result ) ? $result : $trimmed;
+	}
+
+	/**
+	 * Reduce one product entry (a format_product_summary shape) to the kept
+	 * essentials for the model copy. Only fields actually present are emitted, so a
+	 * minimal add-on product shape is not padded with empties.
+	 *
+	 * @param mixed $product One product entry from a products[] result.
+	 * @return mixed The trimmed entry (non-array entries pass through untouched).
+	 */
+	private function trim_product_summary( $product ) {
+		if ( ! is_array( $product ) ) {
+			return $product;
+		}
+
+		$keep = [ 'id', 'name', 'price', 'in_stock', 'on_sale' ];
+		$out  = [];
+		foreach ( $keep as $field ) {
+			if ( array_key_exists( $field, $product ) ) {
+				$out[ $field ] = $product[ $field ];
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Bound the outgoing message context to a configurable per-conversation token
+	 * budget, dropping the OLDEST non-essential history when over.
+	 *
+	 * Budget resolution: option `fahad_ai_token_budget` (sane default 0 = unlimited),
+	 * then the `fahad_ai_token_budget` filter. 0 / absent / negative ⇒ unlimited, so
+	 * behaviour is unchanged unless a site opts in.
+	 *
+	 * Estimation: a deterministic char/÷4 proxy over the JSON-encoded messages
+	 * (~4 chars per token is a standard rule of thumb). It does not need to match a
+	 * provider tokenizer exactly — it only needs to be a stable, testable bound.
+	 *
+	 * What is PRESERVED when over budget (never broken):
+	 *   - a leading system message (Moonshot passes the system prompt as messages[0]);
+	 *   - the most recent user turn AND everything after it — i.e. the in-progress
+	 *     tool loop (assistant tool_use + the user/tool tool_result messages), so a
+	 *     turn mid-flight is never split.
+	 * The "middle" (older history between the system message and the latest user
+	 * turn) is dropped from the OLDEST end, one message at a time, until the estimate
+	 * fits or the middle is empty. If even the protected head+tail exceed the budget,
+	 * we send the head+tail (correctness/grounding over a hard size cap).
+	 *
+	 * @param array $messages The outgoing message array (with or without a leading system message).
+	 * @return array The (possibly condensed) message array.
+	 */
+	private function apply_token_budget( array $messages ): array {
+		$budget = (int) apply_filters(
+			'fahad_ai_token_budget',
+			(int) get_option( 'fahad_ai_token_budget', 0 )
+		);
+
+		// 0 / negative ⇒ unlimited.
+		if ( $budget <= 0 || empty( $messages ) ) {
+			return $messages;
+		}
+
+		if ( $this->estimate_tokens( $messages ) <= $budget ) {
+			return $messages;
+		}
+
+		// Protect a leading system message (Moonshot).
+		$has_system = isset( $messages[0]['role'] ) && 'system' === $messages[0]['role'];
+		$head       = $has_system ? array_slice( $messages, 0, 1 ) : [];
+		$body       = $has_system ? array_slice( $messages, 1 ) : $messages;
+
+		// The protected tail starts at the LAST genuine user turn (role user with
+		// plain string content — a human message, NOT a tool_result block, which is
+		// role user with array content on Anthropic). Everything from there to the
+		// end is the active turn + its in-progress tool loop and is never dropped.
+		$tail_start = null;
+		foreach ( $body as $i => $msg ) {
+			if ( ( $msg['role'] ?? '' ) === 'user' && is_string( $msg['content'] ?? null ) ) {
+				$tail_start = $i;
+			}
+		}
+		// No genuine user turn found → protect the final message as the tail.
+		if ( null === $tail_start ) {
+			$tail_start = count( $body ) - 1;
+		}
+
+		$middle = array_slice( $body, 0, $tail_start );
+		$tail   = array_slice( $body, $tail_start );
+
+		// Drop oldest middle messages until we fit (or the middle is exhausted).
+		while ( ! empty( $middle )
+			&& $this->estimate_tokens( array_merge( $head, $middle, $tail ) ) > $budget ) {
+			array_shift( $middle );
+		}
+
+		return array_merge( $head, $middle, $tail );
+	}
+
+	/**
+	 * Estimate the token footprint of a message array with a char/÷4 proxy over its
+	 * JSON encoding. Deterministic and offline — used only to compare against the
+	 * configured budget, so an approximate-but-stable count is sufficient.
+	 *
+	 * @param array $messages Messages to size.
+	 * @return int Estimated tokens.
+	 */
+	private function estimate_tokens( array $messages ): int {
+		$json = wp_json_encode( $messages );
+		return (int) ceil( strlen( is_string( $json ) ? $json : '' ) / 4 );
+	}
+
+	/**
+	 * Resolve the model for a turn, allowing configurable routing.
+	 *
+	 * The DEFAULT preserves today's behaviour exactly: the configured model is
+	 * returned unchanged. A site can route to a cheaper/faster model for simple turns
+	 * and a more capable one for reasoning by hooking:
+	 *
+	 *   apply_filters( 'fahad_ai_model', string $default_model, string $provider, array $context )
+	 *
+	 * where $context describes the turn — `has_tools` (bool: whether tools are in
+	 * play) and `iteration` (int: the agent-loop index) — so a heuristic can pick by
+	 * complexity. A filter returning a non-string (or empty) value is ignored and the
+	 * configured default stands (defence in depth — a bad hook never poisons the
+	 * payload).
+	 *
+	 * @param string $default  The configured model for the provider.
+	 * @param string $provider 'anthropic' | 'moonshot'.
+	 * @param array  $context  Turn context: { has_tools: bool, iteration: int }.
+	 * @return string The model to use for this request.
+	 */
+	private function resolve_model( string $default, string $provider, array $context = [] ): string {
+		$model = apply_filters( 'fahad_ai_model', $default, $provider, $context );
+
+		return ( is_string( $model ) && '' !== $model ) ? $model : $default;
 	}
 
 	// =========================================================================
@@ -697,7 +954,11 @@ Guidelines:
 		);
 
 		for ( $i = 0; $i < $max; $i++ ) {
-			[ $text, $tool_calls, $error ] = $this->stream_one_turn( $api_msgs );
+			// Cost/latency: bound the outgoing context to the configured token budget
+			// (no-op by default); the system message + latest turn + in-progress tool
+			// loop survive. The SSE products/comparison events below still carry FULL
+			// data — only the model copy in $api_msgs is trimmed (issue #23).
+			[ $text, $tool_calls, $error ] = $this->stream_one_turn( $this->apply_token_budget( $api_msgs ), $i );
 
 			if ( $error ) {
 				$this->sse_send( 'error', [ 'message' => $error ] );
@@ -724,6 +985,10 @@ Guidelines:
 			// Execute each tool and append results.
 			foreach ( $tool_calls as $tc ) {
 				$this->sse_send( 'tool', [ 'name' => $tc['name'] ] );
+
+				// Sequence per tool call: execute → surface cards/comparison from the
+				// FULL result (the SSE events carry FULL data) → TRIM → append the
+				// trimmed copy to the model messages (issue #23).
 				$result = $tools->execute( $tc['name'], $tc['input'] );
 
 				$cards = $this->tool_result_cards( $tc['name'], $result );
@@ -743,7 +1008,7 @@ Guidelines:
 				$api_msgs[] = [
 					'role'         => 'tool',
 					'tool_call_id' => $tc['id'],
-					'content'      => wp_json_encode( $result ),
+					'content'      => wp_json_encode( $this->trim_tool_result( $tc['name'], $result ) ),
 				];
 			}
 		}
@@ -758,16 +1023,23 @@ Guidelines:
 	 *
 	 * @return array{0: string, 1: array, 2: string|null} [text, tool_calls, error]
 	 */
-	private function stream_one_turn( array $messages ): array {
+	private function stream_one_turn( array $messages, int $iteration = 0 ): array {
 		$api_key = get_option( 'fahad_ai_moonshot_api_key', '' );
-		$model   = get_option( 'fahad_ai_moonshot_model', 'kimi-k2.6' );
+		$tools   = $this->get_openai_tools();
+
+		// Model routing (issue #23): default unchanged; a fahad_ai_model hook may route.
+		$model = $this->resolve_model(
+			get_option( 'fahad_ai_moonshot_model', 'kimi-k2.6' ),
+			'moonshot',
+			[ 'has_tools' => ! empty( $tools ), 'iteration' => $iteration ]
+		);
 
 		$payload = [
 			'model'      => $model,
 			'messages'   => $messages,
 			'stream'     => true,
 			'max_tokens' => 1024,
-			'tools'      => $this->get_openai_tools(),
+			'tools'      => $tools,
 		];
 
 		$collected_text  = '';
