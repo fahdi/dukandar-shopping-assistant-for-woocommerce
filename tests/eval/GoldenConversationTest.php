@@ -485,6 +485,93 @@ final class GoldenConversationTest extends TestCase {
 	}
 
 	// =========================================================================
+	// Cost & latency controls END-TO-END (issue #23)
+	// =========================================================================
+
+	/**
+	 * Drive the REAL Anthropic loop over a 10-product search and prove the cost
+	 * control end-to-end: the tool result the MODEL sees (reconstructed from the
+	 * transcript the loop wrote — i.e. the trimmed copy) is substantially smaller
+	 * than the FULL result, yet the answer stays GROUNDED (names + prices survive)
+	 * and the product CARDS surfaced to the widget keep their full fields (image).
+	 *
+	 * This is the "measurable token reduction on a representative conversation"
+	 * acceptance, exercised through the live loop rather than a unit on the helper.
+	 */
+	public function test_trimming_shrinks_model_transcript_but_keeps_cards_and_grounding(): void {
+		// 10 full products, each with the heavy fields the card needs but the model
+		// does not (image, long description, regular/sale split, url).
+		$products = [];
+		$full_products_for_size = [];
+		for ( $i = 1; $i <= 10; $i++ ) {
+			$products[] = [
+				'id'                => $i,
+				'name'              => "Trail Shoe {$i}",
+				'price'             => ( 50 + $i ) . '.00',
+				'in_stock'          => true,
+				'short_description' => str_repeat( 'A detailed marketing blurb that the model never needs to read. ', 6 ),
+			];
+			// The shape format_product_summary emits (what the FULL result carries).
+			$full_products_for_size[] = [
+				'id'                => $i,
+				'name'              => "Trail Shoe {$i}",
+				'price'             => '$' . ( 50 + $i ) . '.00',
+				'regular_price'     => '$' . ( 50 + $i ) . '.00',
+				'sale_price'        => null,
+				'on_sale'           => false,
+				'in_stock'          => true,
+				'short_description' => str_repeat( 'A detailed marketing blurb that the model never needs to read. ', 6 ),
+				'image'             => 'http://example.com/placeholder.png',
+				'url'               => 'http://example.com/?p=' . $i,
+				'rating'            => 0.0,
+				'review_count'      => 0,
+			];
+		}
+
+		EvalHarness::stub_environment( [ 'fahad_ai_provider' => 'anthropic' ] );
+		EvalHarness::stub_woocommerce( [ 'products' => $products ] );
+		EvalHarness::script_transport( [
+			EvalHarness::anthropic_tool_turn( [
+				[ 'name' => 'search_products', 'input' => [ 'query' => 'trail shoes', 'limit' => 10 ] ],
+			] ),
+			// A grounded intro: it names a real product and quotes its real price.
+			EvalHarness::anthropic_text_turn( 'Here are some great trail shoes — the "Trail Shoe 1" is a solid pick at $51.00. Take a look below.' ),
+		] );
+
+		$run = EvalHarness::run( 'anthropic', [
+			[ 'role' => 'user', 'content' => 'show me trail shoes' ],
+		] );
+
+		$this->assertFalse( is_wp_error( $run['result'] ) );
+
+		// 1. The model saw the TRIMMED result (reconstructed from the transcript):
+		//    name + price survive, image + short_description are gone.
+		$seen = $run['tool_results'][0] ?? [];
+		$this->assertCount( 10, $seen['products'] );
+		$this->assertSame( 'Trail Shoe 1', $seen['products'][0]['name'] );
+		$this->assertArrayNotHasKey( 'image', $seen['products'][0] );
+		$this->assertArrayNotHasKey( 'short_description', $seen['products'][0] );
+
+		// 2. Measurable reduction: the trimmed copy the model saw is much smaller than
+		//    the full result the tool produced (well under half the encoded size).
+		$full_len    = strlen( json_encode( [ 'found' => 10, 'products' => $full_products_for_size ] ) );
+		$trimmed_len = strlen( json_encode( $seen ) );
+		$this->assertLessThan(
+			$full_len * 0.5,
+			$trimmed_len,
+			sprintf( 'expected trimmed transcript << full result; full=%d trimmed=%d', $full_len, $trimmed_len )
+		);
+
+		// 3. The CARDS surfaced to the widget kept the full fields (image present).
+		$this->assertCount( 10, $run['products'] );
+		$this->assertArrayHasKey( 'image', $run['products'][0] );
+		$this->assertNotSame( '', $run['products'][0]['image'] );
+
+		// 4. The answer is still grounded against what the model saw (trimmed) results.
+		$this->assertSame( [], EvalHarness::grounding_violations( $run['answer'], $run['tool_results'] ) );
+	}
+
+	// =========================================================================
 	// Grounding-checker SELF-TESTS (prove the checker actually works)
 	// =========================================================================
 

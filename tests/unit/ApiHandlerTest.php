@@ -711,4 +711,464 @@ class ApiHandlerTest extends TestCase {
         $this->assertCount( 2, $cards );
         $this->assertSame( 10, $cards[0]['id'] );
     }
+
+    // ── trim_tool_result() — shrink the model copy, never the card copy (issue #23)
+    // The FULL tool result is JSON-appended to the model's message history every
+    // turn (expensive). trim_tool_result() returns a COPY reduced to the fields the
+    // model needs to reason/answer. Cards are built from the FULL result BEFORE the
+    // trim (proven below), so the widget payload is unaffected — only the model copy
+    // shrinks. Trimming is tool-aware and conservative (keep name + price so the
+    // grounding eval, which reconstructs results from the trimmed transcript, still
+    // passes).
+
+    private function trim_tool_result( string $tool, array $result ): array {
+        $method = new ReflectionMethod( Fahad_AI_API_Handler::class, 'trim_tool_result' );
+        return $method->invoke( $this->handler(), $tool, $result );
+    }
+
+    /** Build a full search result with N products carrying every heavy field. */
+    private function full_search_result( int $n ): array {
+        $products = [];
+        for ( $i = 1; $i <= $n; $i++ ) {
+            $products[] = [
+                'id'                => $i,
+                'name'              => "Product {$i}",
+                'price'             => '$' . ( 10 + $i ) . '.00',
+                'regular_price'     => '$' . ( 20 + $i ) . '.00',
+                'sale_price'        => '$' . ( 10 + $i ) . '.00',
+                'on_sale'           => true,
+                'in_stock'          => true,
+                'short_description' => str_repeat( 'A long product blurb that costs tokens. ', 8 ),
+                'image'             => "https://example.com/wp-content/uploads/2026/01/product-{$i}-1024x1024.jpg",
+                'url'               => "https://example.com/product/product-{$i}/",
+                'rating'            => 4.5,
+                'review_count'      => 12,
+            ];
+        }
+        return [ 'found' => $n, 'products' => $products ];
+    }
+
+    public function test_trim_reduces_search_result_size_substantially(): void {
+        // The headline "measurable token reduction" evidence: a 10-product search
+        // result, once trimmed for the MODEL, is much smaller than the full result.
+        $full    = $this->full_search_result( 10 );
+        $trimmed = $this->trim_tool_result( 'search_products', $full );
+
+        $full_len    = strlen( json_encode( $full ) );
+        $trimmed_len = strlen( json_encode( $trimmed ) );
+
+        // Meaningful margin: trimmed encodes to less than HALF the full size.
+        $this->assertLessThan(
+            $full_len * 0.5,
+            $trimmed_len,
+            sprintf( 'expected a substantial reduction; full=%d trimmed=%d', $full_len, $trimmed_len )
+        );
+    }
+
+    public function test_trim_preserves_name_and_price_for_each_product(): void {
+        // Grounding depends on name + price surviving the trim (the eval reconstructs
+        // the results the model saw from the trimmed transcript).
+        $trimmed = $this->trim_tool_result( 'search_products', $this->full_search_result( 3 ) );
+
+        $this->assertCount( 3, $trimmed['products'] );
+        foreach ( $trimmed['products'] as $i => $p ) {
+            $n = $i + 1;
+            $this->assertSame( $n, $p['id'] );
+            $this->assertSame( "Product {$n}", $p['name'] );
+            $this->assertSame( '$' . ( 10 + $n ) . '.00', $p['price'] );
+            $this->assertArrayHasKey( 'in_stock', $p );
+        }
+    }
+
+    public function test_trim_drops_heavy_product_fields(): void {
+        $trimmed = $this->trim_tool_result( 'search_products', $this->full_search_result( 2 ) );
+
+        foreach ( $trimmed['products'] as $p ) {
+            $this->assertArrayNotHasKey( 'image', $p );
+            $this->assertArrayNotHasKey( 'short_description', $p );
+            $this->assertArrayNotHasKey( 'regular_price', $p );
+            $this->assertArrayNotHasKey( 'sale_price', $p );
+        }
+    }
+
+    public function test_trim_does_not_mutate_the_full_result_used_for_cards(): void {
+        // The cards are built from the FULL result; trim must operate on a COPY and
+        // never strip fields off the array the caller still holds for card emission.
+        $full = $this->full_search_result( 2 );
+        $this->trim_tool_result( 'search_products', $full );
+
+        // The original still has every heavy field — trimming did not mutate it.
+        $this->assertArrayHasKey( 'image', $full['products'][0] );
+        $this->assertArrayHasKey( 'short_description', $full['products'][0] );
+        $this->assertSame( 'https://example.com/wp-content/uploads/2026/01/product-1-1024x1024.jpg', $full['products'][0]['image'] );
+
+        // And a card built from the (untouched) full result still carries the image.
+        $cards = $this->tool_result_cards( 'search_products', $full );
+        $this->assertSame( $full['products'][0]['image'], $cards[0]['image'] );
+    }
+
+    public function test_trim_preserves_cart_link_fields_for_add_to_cart(): void {
+        // The system prompt's link rules depend on cart_url/checkout_url/message and
+        // totals from add_to_cart — they MUST survive the trim.
+        $full = [
+            'success'       => true,
+            'message'       => 'Added 1x Trail Runner to your cart.',
+            'cart_item_key' => 'abc123',
+            'price'         => '$79.99',
+            'cart_total'    => '$79.99',
+            'cart_url'      => 'https://example.com/cart',
+            'checkout_url'  => 'https://example.com/checkout',
+        ];
+        $trimmed = $this->trim_tool_result( 'add_to_cart', $full );
+
+        $this->assertSame( 'https://example.com/cart', $trimmed['cart_url'] );
+        $this->assertSame( 'https://example.com/checkout', $trimmed['checkout_url'] );
+        $this->assertSame( 'Added 1x Trail Runner to your cart.', $trimmed['message'] );
+        $this->assertSame( '$79.99', $trimmed['cart_total'] );
+        // The grounded price the variation fixture references survives too.
+        $this->assertSame( '$79.99', $trimmed['price'] );
+    }
+
+    public function test_trim_preserves_view_cart_link_fields_and_totals(): void {
+        $full = [
+            'empty'        => false,
+            'items'        => [ [ 'cart_item_key' => 'k1', 'product_id' => 10, 'name' => 'Trail Runner', 'quantity' => 1, 'price' => '$79.99', 'line_total' => '$79.99' ] ],
+            'item_count'   => 1,
+            'subtotal'     => '$79.99',
+            'total'        => '$79.99',
+            'cart_url'     => 'https://example.com/cart',
+            'checkout_url' => 'https://example.com/checkout',
+        ];
+        $trimmed = $this->trim_tool_result( 'view_cart', $full );
+
+        $this->assertSame( 'https://example.com/cart', $trimmed['cart_url'] );
+        $this->assertSame( 'https://example.com/checkout', $trimmed['checkout_url'] );
+        $this->assertSame( '$79.99', $trimmed['total'] );
+    }
+
+    public function test_trim_preserves_error_and_login_messages(): void {
+        $this->assertSame(
+            [ 'error' => 'Product not found.' ],
+            $this->trim_tool_result( 'get_product_details', [ 'error' => 'Product not found.' ] )
+        );
+
+        $login = $this->trim_tool_result( 'order_status', [ 'requires_login' => true, 'error' => 'Please log in.' ] );
+        $this->assertTrue( $login['requires_login'] );
+        $this->assertSame( 'Please log in.', $login['error'] );
+    }
+
+    public function test_trim_keeps_single_product_extra_fields_but_drops_heavy_ones(): void {
+        // A single product-shaped result (e.g. get_product_reviews returns id+name
+        // PLUS review snippets the model must summarise) is trimmed SUBTRACTIVELY:
+        // only the heavy product fields are dropped, every other field is kept so the
+        // grounded review/quote survives.
+        $full = [
+            'id'                => 101,
+            'name'              => 'Trail Runner',
+            'price'             => '$79.99',
+            'regular_price'     => '$99.99',
+            'sale_price'        => '$79.99',
+            'on_sale'           => true,
+            'in_stock'          => true,
+            'image'             => 'https://example.com/img/trail.jpg',
+            'short_description' => 'A very long short description that the model does not need.',
+            'rating'            => 4.5,
+            'review_count'      => 24,
+            'reviews'           => [
+                [ 'author' => 'Dana', 'rating' => 5, 'excerpt' => 'great quality and so comfortable', 'date' => '2026-03-02' ],
+            ],
+        ];
+        $trimmed = $this->trim_tool_result( 'get_product_reviews', $full );
+
+        // Heavy fields gone.
+        $this->assertArrayNotHasKey( 'image', $trimmed );
+        $this->assertArrayNotHasKey( 'short_description', $trimmed );
+        $this->assertArrayNotHasKey( 'regular_price', $trimmed );
+        $this->assertArrayNotHasKey( 'sale_price', $trimmed );
+
+        // Essentials + the grounded review text kept.
+        $this->assertSame( 'Trail Runner', $trimmed['name'] );
+        $this->assertSame( '$79.99', $trimmed['price'] );
+        $this->assertSame( 24, $trimmed['review_count'] );
+        $this->assertSame( 'great quality and so comfortable', $trimmed['reviews'][0]['excerpt'] );
+    }
+
+    public function test_trim_keeps_comparison_attributes_and_trims_columns(): void {
+        // A comparison result feeds the model BOTH product columns and the aligned
+        // attribute rows it reasons over. Trim the heavy per-product fields but keep
+        // the attribute table intact.
+        $full = [
+            'found'      => 2,
+            'products'   => [
+                [ 'id' => 401, 'name' => 'Trail Runner', 'price' => '$79.99', 'in_stock' => true, 'image' => 'https://x/a.jpg', 'short_description' => 'blurb', 'regular_price' => '$99.99' ],
+                [ 'id' => 402, 'name' => 'Summit Pro',   'price' => '$129.99', 'in_stock' => true, 'image' => 'https://x/b.jpg', 'short_description' => 'blurb', 'regular_price' => '$149.99' ],
+            ],
+            'attributes' => [
+                [ 'name' => 'Waterproof', 'values' => [ 401 => 'No', 402 => 'Yes' ] ],
+                [ 'name' => 'Weight',     'values' => [ 401 => '280g', 402 => '340g' ] ],
+            ],
+        ];
+        $trimmed = $this->trim_tool_result( 'compare_products', $full );
+
+        // Attribute rows are preserved verbatim (the model reasons over these).
+        $this->assertSame( $full['attributes'], $trimmed['attributes'] );
+
+        // Columns keep name + price, drop the heavy fields.
+        $this->assertSame( 'Trail Runner', $trimmed['products'][0]['name'] );
+        $this->assertSame( '$79.99', $trimmed['products'][0]['price'] );
+        $this->assertArrayNotHasKey( 'image', $trimmed['products'][0] );
+        $this->assertArrayNotHasKey( 'short_description', $trimmed['products'][0] );
+    }
+
+    public function test_trim_is_filterable(): void {
+        // The trim must be tunable/disable-able via the documented filter.
+        Functions\when( 'apply_filters' )->alias(
+            static function ( $hook, $value = null, $tool = null, $full = null ) {
+                // A hook that disables trimming returns the full result untouched.
+                return 'fahad_ai_trim_tool_result' === $hook ? $full : $value;
+            }
+        );
+
+        $full    = $this->full_search_result( 2 );
+        $trimmed = $this->trim_tool_result( 'search_products', $full );
+
+        // With the disabling filter, the "trimmed" copy equals the full result.
+        $this->assertArrayHasKey( 'image', $trimmed['products'][0] );
+        $this->assertSame( $full, $trimmed );
+    }
+
+    public function test_trim_passes_tool_and_full_result_to_the_filter(): void {
+        $seen = [];
+        Functions\when( 'apply_filters' )->alias(
+            static function ( $hook, $value = null, $tool = null, $full = null ) use ( &$seen ) {
+                if ( 'fahad_ai_trim_tool_result' === $hook ) {
+                    $seen = [ 'tool' => $tool, 'full' => $full ];
+                }
+                return $value;
+            }
+        );
+
+        $full = $this->full_search_result( 1 );
+        $this->trim_tool_result( 'search_products', $full );
+
+        $this->assertSame( 'search_products', $seen['tool'] );
+        $this->assertSame( $full, $seen['full'] );
+    }
+
+    // ── apply_token_budget() — bound the outgoing context (issue #23) ───────────
+    // A configurable per-conversation budget (option + filter fahad_ai_token_budget,
+    // default 0 = unlimited) caps the context. Token size is estimated with a
+    // char/÷4 proxy. When over budget, the OLDEST non-essential history is dropped
+    // while the system prompt (if present), the latest user turn, and the most recent
+    // tool results survive. An in-progress tool loop is never broken.
+
+    private function apply_token_budget( array $messages ): array {
+        $method = new ReflectionMethod( Fahad_AI_API_Handler::class, 'apply_token_budget' );
+        return $method->invoke( $this->handler(), $messages );
+    }
+
+    private function set_option_alias( array $map ): void {
+        Functions\when( 'get_option' )->alias(
+            static fn( $key, $default = '' ) => $map[ $key ] ?? $default
+        );
+    }
+
+    public function test_budget_unlimited_by_default_leaves_messages_unchanged(): void {
+        // Default option 0 / absent → unlimited → identity.
+        $messages = [
+            [ 'role' => 'user', 'content' => str_repeat( 'hello ', 500 ) ],
+            [ 'role' => 'assistant', 'content' => str_repeat( 'world ', 500 ) ],
+            [ 'role' => 'user', 'content' => 'and now this' ],
+        ];
+
+        $this->assertSame( $messages, $this->apply_token_budget( $messages ) );
+    }
+
+    public function test_budget_under_limit_leaves_messages_unchanged(): void {
+        $this->set_option_alias( [ 'fahad_ai_token_budget' => 100000 ] );
+
+        $messages = [
+            [ 'role' => 'user', 'content' => 'short' ],
+            [ 'role' => 'assistant', 'content' => 'also short' ],
+        ];
+
+        $this->assertSame( $messages, $this->apply_token_budget( $messages ) );
+    }
+
+    public function test_budget_drops_oldest_history_when_over_limit(): void {
+        // A tiny budget forces the oldest history out. The latest user turn must
+        // survive; the very first (oldest) message must be dropped.
+        $this->set_option_alias( [ 'fahad_ai_token_budget' => 50 ] );
+
+        $messages = [
+            [ 'role' => 'user', 'content' => str_repeat( 'OLDEST ', 200 ) ],      // ~1400 chars
+            [ 'role' => 'assistant', 'content' => str_repeat( 'middle ', 200 ) ], // ~1400 chars
+            [ 'role' => 'user', 'content' => 'the newest question' ],
+        ];
+
+        $out = $this->apply_token_budget( $messages );
+
+        // The newest user turn is preserved.
+        $last = end( $out );
+        $this->assertSame( 'the newest question', $last['content'] );
+        // The oldest message was dropped (the budget is far smaller than its size).
+        $this->assertLessThan( count( $messages ), count( $out ) );
+        $contents = array_map( static fn( $m ) => $m['content'] ?? '', $out );
+        $this->assertNotContains( str_repeat( 'OLDEST ', 200 ), $contents );
+    }
+
+    public function test_budget_keeps_system_message_and_latest_turn(): void {
+        // Moonshot passes a leading system message in the array. Even over budget,
+        // the system prompt and the latest user turn (plus its tool loop) survive.
+        $this->set_option_alias( [ 'fahad_ai_token_budget' => 60 ] );
+
+        $messages = [
+            [ 'role' => 'system', 'content' => 'SYSTEM PROMPT keep me' ],
+            [ 'role' => 'user', 'content' => str_repeat( 'old turn ', 200 ) ],
+            [ 'role' => 'assistant', 'content' => str_repeat( 'old answer ', 200 ) ],
+            [ 'role' => 'user', 'content' => 'latest question' ],
+        ];
+
+        $out = $this->apply_token_budget( $messages );
+
+        $this->assertSame( 'system', $out[0]['role'] );
+        $this->assertSame( 'SYSTEM PROMPT keep me', $out[0]['content'] );
+        $last = end( $out );
+        $this->assertSame( 'latest question', $last['content'] );
+    }
+
+    public function test_budget_preserves_in_progress_tool_loop(): void {
+        // The latest user turn is followed by an assistant tool_use + a user
+        // tool_result (an in-progress Anthropic loop). The budget must NOT split that
+        // pair off — everything from the latest user turn to the end is protected.
+        $this->set_option_alias( [ 'fahad_ai_token_budget' => 80 ] );
+
+        $messages = [
+            [ 'role' => 'user', 'content' => str_repeat( 'ancient ', 300 ) ],
+            [ 'role' => 'assistant', 'content' => str_repeat( 'history ', 300 ) ],
+            [ 'role' => 'user', 'content' => 'find me a tee' ],
+            [ 'role' => 'assistant', 'content' => [ [ 'type' => 'tool_use', 'id' => 'tu1', 'name' => 'search_products', 'input' => [] ] ] ],
+            [ 'role' => 'user', 'content' => [ [ 'type' => 'tool_result', 'tool_use_id' => 'tu1', 'content' => '{"found":1}' ] ] ],
+        ];
+
+        $out = $this->apply_token_budget( $messages );
+
+        // The whole tail (latest user turn + tool_use + tool_result) is intact, in order.
+        $tail = array_slice( $out, -3 );
+        $this->assertSame( 'find me a tee', $tail[0]['content'] );
+        $this->assertSame( 'tool_use', $tail[1]['content'][0]['type'] );
+        $this->assertSame( 'tool_result', $tail[2]['content'][0]['type'] );
+    }
+
+    public function test_budget_is_filterable(): void {
+        // The option default can be overridden by the fahad_ai_token_budget filter.
+        // Here the option is unset (would be unlimited) but the filter sets a small
+        // budget, so older history is dropped.
+        Functions\when( 'apply_filters' )->alias(
+            static fn( $hook, $value = null ) => 'fahad_ai_token_budget' === $hook ? 50 : $value
+        );
+
+        $messages = [
+            [ 'role' => 'user', 'content' => str_repeat( 'OLDEST ', 200 ) ],
+            [ 'role' => 'user', 'content' => 'newest' ],
+        ];
+
+        $out = $this->apply_token_budget( $messages );
+
+        $this->assertLessThan( count( $messages ), count( $out ) );
+        $last = end( $out );
+        $this->assertSame( 'newest', $last['content'] );
+    }
+
+    // ── resolve_model() — configurable model routing (issue #23) ────────────────
+    // Routing lets a hook pick a cheaper/faster model for simple turns and a more
+    // capable one for reasoning. The DEFAULT must preserve today's behaviour: the
+    // configured model is returned unchanged unless a fahad_ai_model filter overrides
+    // it. The chosen model flows into the request payload.
+
+    private function resolve_model( string $default, string $provider, array $context = [] ): string {
+        $method = new ReflectionMethod( Fahad_AI_API_Handler::class, 'resolve_model' );
+        return $method->invoke( $this->handler(), $default, $provider, $context );
+    }
+
+    public function test_resolve_model_returns_configured_model_by_default(): void {
+        // No filter hooked → the default (configured) model is returned verbatim.
+        Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => $value );
+
+        $this->assertSame(
+            'claude-haiku-4-5-20251001',
+            $this->resolve_model( 'claude-haiku-4-5-20251001', 'anthropic', [ 'has_tools' => true, 'iteration' => 0 ] )
+        );
+    }
+
+    public function test_resolve_model_can_be_overridden_by_filter(): void {
+        Functions\when( 'apply_filters' )->alias(
+            static fn( $hook, $value = null, $provider = null, $context = null ) =>
+                'fahad_ai_model' === $hook ? 'claude-opus-4-8' : $value
+        );
+
+        $this->assertSame(
+            'claude-opus-4-8',
+            $this->resolve_model( 'claude-haiku-4-5-20251001', 'anthropic', [] )
+        );
+    }
+
+    public function test_resolve_model_passes_provider_and_context_to_filter(): void {
+        $seen = [];
+        Functions\when( 'apply_filters' )->alias(
+            static function ( $hook, $value = null, $provider = null, $context = null ) use ( &$seen ) {
+                if ( 'fahad_ai_model' === $hook ) {
+                    $seen = [ 'default' => $value, 'provider' => $provider, 'context' => $context ];
+                }
+                return $value;
+            }
+        );
+
+        $this->resolve_model( 'kimi-k2.6', 'moonshot', [ 'has_tools' => false, 'iteration' => 2 ] );
+
+        $this->assertSame( 'kimi-k2.6', $seen['default'] );
+        $this->assertSame( 'moonshot', $seen['provider'] );
+        $this->assertSame( [ 'has_tools' => false, 'iteration' => 2 ], $seen['context'] );
+    }
+
+    public function test_resolve_model_falls_back_when_filter_returns_non_string(): void {
+        // Defence in depth: a misbehaving filter returning a non-string must not
+        // poison the payload — the configured default stands.
+        Functions\when( 'apply_filters' )->alias(
+            static fn( $hook, $value = null ) => 'fahad_ai_model' === $hook ? null : $value
+        );
+
+        $this->assertSame(
+            'kimi-k2.6',
+            $this->resolve_model( 'kimi-k2.6', 'moonshot', [] )
+        );
+    }
+
+    public function test_anthropic_payload_uses_the_routed_model(): void {
+        // End-to-end seam check: a fahad_ai_model override flows into the Anthropic
+        // request payload (asserted via the captured wp_remote_post body).
+        $this->set_option_alias( [ 'fahad_ai_anthropic_api_key' => 'k', 'fahad_ai_anthropic_model' => 'claude-haiku-4-5-20251001' ] );
+        Functions\when( 'apply_filters' )->alias(
+            static fn( $hook, $value = null ) => 'fahad_ai_model' === $hook ? 'claude-opus-4-8' : $value
+        );
+        Functions\when( 'wp_json_encode' )->alias( static fn( $d ) => json_encode( $d ) );
+
+        $captured = null;
+        Functions\when( 'wp_remote_post' )->alias(
+            static function ( $url, $args ) use ( &$captured ) {
+                $captured = json_decode( $args['body'], true );
+                return [ 'is_eval' => true ];
+            }
+        );
+        Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+        Functions\when( 'wp_remote_retrieve_body' )->justReturn( json_encode( [ 'stop_reason' => 'end_turn', 'content' => [] ] ) );
+        // is_wp_error() is a real stub (instanceof WP_Error); the array returned by
+        // wp_remote_post above is not a WP_Error, so it correctly reports false —
+        // do NOT redefine it via Brain\Monkey (Patchwork "DefinedTooEarly").
+
+        $method = new ReflectionMethod( Fahad_AI_API_Handler::class, 'call_anthropic' );
+        $method->invoke( $this->handler(), [ [ 'role' => 'user', 'content' => 'hi' ] ] );
+
+        $this->assertSame( 'claude-opus-4-8', $captured['model'] );
+    }
 }
