@@ -79,6 +79,13 @@ final class Fahad_AI_Tool_Registry {
 	 * Fahad_AI_Tools::execute switch produced). A callback that throws is caught
 	 * so a third-party tool cannot fatal the agent request (error isolation).
 	 *
+	 * Personal-data tools (those declaring `'personal' => true`) are login-gated
+	 * here, BEFORE their callback runs: a guest gets the standard login-required
+	 * error and the callback is never reached. This is the central half of the
+	 * authorization boundary (defence in depth) — per-RECORD ownership still lives
+	 * inside each personal tool's callback (see Fahad_AI_Auth::user_owns), because
+	 * the registry cannot know who a given order/wallet/memory row belongs to.
+	 *
 	 * @param string $name  Tool name.
 	 * @param array  $input Tool input from the model.
 	 * @return array
@@ -94,6 +101,16 @@ final class Fahad_AI_Tool_Registry {
 					$name
 				),
 			];
+		}
+
+		// Central login gate for tools that expose personal data. A personal tool
+		// cannot leak by forgetting to check login — the registry blocks guests
+		// before the callback is ever invoked.
+		if ( ! empty( $tools[ $name ]['personal'] ) ) {
+			$gate = Fahad_AI_Auth::guard_logged_in();
+			if ( true !== $gate ) {
+				return $gate;
+			}
 		}
 
 		try {

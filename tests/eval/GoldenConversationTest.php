@@ -223,6 +223,91 @@ final class GoldenConversationTest extends TestCase {
 	}
 
 	// =========================================================================
+	// Privacy / auth BOUNDARY — guest-block END-TO-END (issue #25)
+	// =========================================================================
+
+	/**
+	 * A personal-data tool (declaring `'personal' => true`) registered via the
+	 * extension filter must block a GUEST through the REAL agent loop: the central
+	 * login gate in Fahad_AI_Tool_Registry::dispatch() returns the login-required
+	 * error WITHOUT invoking the tool's callback, that error flows back to the
+	 * model as the tool_result, and the model's scripted answer escalates the user
+	 * to log in (a grounded "abstain"/escalate — no personal data is fabricated).
+	 *
+	 * This is the eval-level analogue of the ToolRegistryTest guest-block unit
+	 * test: there the registry is exercised in isolation; here the gate runs inside
+	 * Fahad_AI_API_Handler::run_anthropic_agent() against the scripted transport,
+	 * exactly as it would for a real guest request. A declarative fixture cannot
+	 * install the apply_filters / is_user_logged_in stubs itself, so — like the
+	 * #22 filter test — this lives as a dedicated test.
+	 */
+	public function test_personal_tool_blocks_guest_end_to_end(): void {
+		$callback_invoked = false;
+
+		// Guest: not logged in. The boundary must stop the personal tool here.
+		Functions\when( 'is_user_logged_in' )->justReturn( false );
+		Functions\when( 'get_current_user_id' )->justReturn( 0 );
+
+		// Register a personal "order_status" tool via the public extension filter.
+		Functions\when( 'apply_filters' )->alias(
+			function ( $hook, $value = null ) use ( &$callback_invoked ) {
+				if ( 'fahad_ai_register_tools' === $hook && is_array( $value ) ) {
+					$value[] = [
+						'name'        => 'order_status',
+						'description' => 'Look up the status of the logged-in customer\'s order.',
+						'parameters'  => [
+							'type'       => 'object',
+							'properties' => [
+								'order_id' => [ 'type' => 'integer', 'description' => 'The order ID' ],
+							],
+						],
+						'personal'    => true,
+						'callback'    => function ( array $input ) use ( &$callback_invoked ): array {
+							// Must NEVER run for a guest — proves the gate is central,
+							// not something this tool checks for itself.
+							$callback_invoked = true;
+							return [ 'order_id' => $input['order_id'] ?? 0, 'status' => 'Shipped' ];
+						},
+					];
+				}
+				return $value;
+			}
+		);
+
+		EvalHarness::stub_environment( [ 'fahad_ai_provider' => 'anthropic' ] );
+		EvalHarness::stub_woocommerce( [] );
+		EvalHarness::script_transport( [
+			// Turn 1: the model tries the personal tool.
+			EvalHarness::anthropic_tool_turn( [
+				[ 'name' => 'order_status', 'input' => [ 'order_id' => 7 ] ],
+			] ),
+			// Turn 2: seeing the login-required tool_result, the model escalates.
+			EvalHarness::anthropic_text_turn(
+				'You will need to log in to your account so I can check that order for you.'
+			),
+		] );
+
+		$run = EvalHarness::run( 'anthropic', [
+			[ 'role' => 'user', 'content' => 'where is my order 7?' ],
+		] );
+
+		// The loop completed and the guest NEVER reached the personal callback.
+		$this->assertFalse( is_wp_error( $run['result'] ) );
+		$this->assertFalse( $callback_invoked, 'guest reached a personal tool callback through the real loop' );
+
+		// The tool "ran" (was dispatched) but returned the login-required error.
+		$names = array_map( static fn( $c ) => $c['name'], $run['tool_calls'] );
+		$this->assertSame( [ 'order_status' ], $names );
+		$this->assertTrue( $run['tool_results'][0]['requires_login'] ?? false );
+
+		// No personal data leaked into the tool result (no "Shipped" status).
+		$this->assertArrayNotHasKey( 'status', $run['tool_results'][0] );
+
+		// The model's answer steers the user to log in (grounded escalate).
+		$this->assertMatchesRegularExpression( '/\blog ?in\b/i', $run['answer'] );
+	}
+
+	// =========================================================================
 	// Grounding-checker SELF-TESTS (prove the checker actually works)
 	// =========================================================================
 
