@@ -112,6 +112,30 @@ if ( ! class_exists( 'WC_Coupon' ) ) {
     }
 }
 
+// Order stub so the order-status tools (issue #17) can be unit tested with
+// per-instance Mockery mocks (Mockery::mock( WC_Order::class )). Only the getters
+// the tools read are declared; real behaviour is mocked per-test. NOTE: the lookup
+// FUNCTIONS wc_get_orders()/wc_get_order() are intentionally NOT defined here —
+// they are stubbed per-test via Brain\Monkey (Functions\when), exactly like
+// wc_get_products()/wc_get_product(). Defining them at global scope in this
+// bootstrap-loaded file would make Brain\Monkey throw "DefinedTooEarly" the moment a
+// test tried to override them (the file loads before Patchwork activates), so the
+// CLASS lives here for type resolution while the FUNCTIONS stay Monkey-controlled.
+if ( ! class_exists( 'WC_Order' ) ) {
+    class WC_Order {
+        public function get_id(): int                       { return 0; }
+        public function get_order_number(): string          { return ''; }
+        public function get_status(): string                { return ''; }
+        public function get_total(): string                 { return '0'; }
+        public function get_customer_id(): int              { return 0; }
+        public function get_date_created()                  { return null; }
+        /** @return array WC_Order_Item_Product[] keyed by line-item id. */
+        public function get_items( $types = 'line_item' ): array { return []; }
+        public function get_meta( string $key = '', bool $single = true ) { return ''; }
+        public function get_billing_email(): string         { return ''; }
+    }
+}
+
 // ── WooCommerce shipping stubs (issue #19) ───────────────────────────────────
 // The shipping tool (Fahad_AI_Shipping_Tools) isolates ALL WC shipping access
 // behind one overridable seam, so the UNIT tests stub it via a subclass and never
