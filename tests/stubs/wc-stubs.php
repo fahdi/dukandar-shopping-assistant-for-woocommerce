@@ -82,3 +82,77 @@ if ( ! class_exists( 'WC_Cart' ) ) {
         public function get_cart_total(): string          { return '$0.00'; }
     }
 }
+
+// ── WooCommerce shipping stubs (issue #19) ───────────────────────────────────
+// The shipping tool (Fahad_AI_Shipping_Tools) isolates ALL WC shipping access
+// behind one overridable seam, so the UNIT tests stub it via a subclass and never
+// touch these classes. They exist for the EVAL fixture (tests/eval/fixtures/shipping.php),
+// which drives the REAL tool end-to-end: there is no harness hook to inject zones,
+// so the tool reads them from this static stub. The data is deliberately fixed —
+// one flat_rate method at 5.00 with NO delivery window — so the eval can assert a
+// GROUNDED cost ($5.00 appears in the tool result) and that no delivery date is
+// invented (WooCommerce core has none). Only Fahad_AI_Shipping_Tools reads these,
+// so a fixed return is safe for the rest of the suite.
+
+if ( ! class_exists( 'WC_Shipping_Method' ) ) {
+    class WC_Shipping_Method {
+        /** @var string Shipping method id (e.g. 'flat_rate', 'free_shipping'). */
+        public string $id;
+        /** @var array<string,string> Method option values, read via get_option(). */
+        private array $options;
+        private string $method_title;
+
+        public function __construct( string $id = 'flat_rate', string $title = '', array $options = [] ) {
+            $this->id           = $id;
+            $this->method_title = '' !== $title ? $title : ucwords( str_replace( '_', ' ', $id ) );
+            $this->options      = $options;
+        }
+
+        public function get_method_title(): string { return $this->method_title; }
+
+        /** @return mixed Option value, or the supplied default when unset. */
+        public function get_option( string $key, $default = '' ) {
+            return $this->options[ $key ] ?? $default;
+        }
+    }
+}
+
+if ( ! class_exists( 'WC_Shipping_Zone' ) ) {
+    class WC_Shipping_Zone {
+        /** @var WC_Shipping_Method[] */
+        private array $methods;
+
+        /** @param WC_Shipping_Method[] $methods Enabled methods this zone serves. */
+        public function __construct( array $methods = [] ) {
+            $this->methods = $methods;
+        }
+
+        /**
+         * @param bool $enabled_only Whether to return only enabled methods (the
+         *                           shipping tool passes true). The stub holds only
+         *                           enabled methods, so the flag is a no-op here.
+         * @return WC_Shipping_Method[]
+         */
+        public function get_shipping_methods( bool $enabled_only = false ): array {
+            return $this->methods;
+        }
+    }
+}
+
+if ( ! class_exists( 'WC_Shipping_Zones' ) ) {
+    class WC_Shipping_Zones {
+        /**
+         * Match a package to a shipping zone. The stub returns a single zone
+         * offering one flat_rate method costing 5.00 with no delivery window — a
+         * deterministic, grounded shape for the eval fixture.
+         *
+         * @param array $package WC shipping package (destination + contents).
+         * @return WC_Shipping_Zone
+         */
+        public static function get_zone_matching_package( array $package ): WC_Shipping_Zone {
+            return new WC_Shipping_Zone( [
+                new WC_Shipping_Method( 'flat_rate', 'Flat rate', [ 'cost' => '5.00' ] ),
+            ] );
+        }
+    }
+}
