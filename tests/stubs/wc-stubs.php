@@ -76,6 +76,10 @@ if ( ! class_exists( 'WC_Product' ) ) {
         // same way the ratings getters above do.
         public function get_upsell_ids(): array           { return []; }
         public function get_cross_sell_ids(): array       { return []; }
+        // Parent id of a variation (child) product; 0 for top-level products.
+        // Read by add_to_cart (issue #12) to verify a chosen variation belongs to
+        // the product before adding it to the cart.
+        public function get_parent_id(): int              { return 0; }
     }
 }
 
