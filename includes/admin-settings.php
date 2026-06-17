@@ -85,6 +85,11 @@ function fahad_ai_settings_page(): void {
 		update_option( 'fahad_ai_fast_model_routing',  empty( $_POST['fast_model_routing'] ) ? 0 : 1 );
 		update_option( 'fahad_ai_fast_model',          sanitize_text_field( wp_unslash( $_POST['fast_model'] ?? '' ) ) );
 
+		// Proactive, value-gated nudge (issue #65). Default OFF (opt-in); the frequency
+		// cap is floored at 0 (0 = effectively off, never nudge).
+		update_option( 'fahad_ai_proactive_enabled',   empty( $_POST['proactive_enabled'] ) ? 0 : 1 );
+		update_option( 'fahad_ai_proactive_frequency', max( 0, (int) ( $_POST['proactive_frequency'] ?? Fahad_AI_Proactive::DEFAULT_FREQUENCY ) ) );
+
 		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'fahad-ai-shopping-assistant-for-woocommerce' ) . '</p></div>';
 	}
 
@@ -107,6 +112,10 @@ function fahad_ai_settings_page(): void {
 	$token_budget       = (int) get_option( 'fahad_ai_token_budget',   0 );
 	$fast_model_routing = (bool) get_option( 'fahad_ai_fast_model_routing', false );
 	$fast_model         = get_option( 'fahad_ai_fast_model',           '' );
+
+	// Proactive nudge (#65).
+	$proactive_enabled   = (bool) get_option( 'fahad_ai_proactive_enabled', 0 );
+	$proactive_frequency = max( 0, (int) get_option( 'fahad_ai_proactive_frequency', Fahad_AI_Proactive::DEFAULT_FREQUENCY ) );
 
 	// The five built-in WooCommerce tools are a protected floor and are never shown as
 	// disable-able. Everything else advertised to the model (packs + add-ons) can be
@@ -366,6 +375,32 @@ function fahad_ai_settings_page(): void {
 							placeholder="claude-haiku-4-5-20251001">
 						<p class="description">
 							<?php esc_html_e( 'Model id to use for simple turns when fast-model routing is enabled (e.g. claude-haiku-4-5-20251001 or kimi-k2.6). Leave blank to keep the configured model.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+						</p>
+					</td>
+				</tr>
+			</table>
+
+			<h2 class="title"><?php esc_html_e( 'Proactive Assist', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></h2>
+			<p class="description" style="max-width:50em;">
+				<?php esc_html_e( 'When enabled, the assistant may show a single, dismissible message offering genuine help — but ONLY when there is real value to surface (a discount code that actually applies, or store credit the shopper has not used). It never invents urgency or scarcity, is capped per visit, and stops the moment a shopper dismisses it. Leave it off if you would rather the assistant only ever speaks when spoken to.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+			</p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Proactive Nudges', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="proactive_enabled" value="1" <?php checked( $proactive_enabled ); ?>>
+							<?php esc_html_e( 'Let the assistant proactively offer a real, applicable deal or unused store credit (off by default).', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+						</label>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="proactive_frequency"><?php esc_html_e( 'Max Nudges Per Visit', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
+					<td>
+						<input type="number" id="proactive_frequency" name="proactive_frequency" min="0" max="5" step="1"
+							value="<?php echo esc_attr( (string) $proactive_frequency ); ?>" class="small-text">
+						<p class="description">
+							<?php esc_html_e( 'How many times, at most, a proactive message may appear in a single visit. 1 (once per session) is recommended; 0 turns proactive messages off.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
 						</p>
 					</td>
 				</tr>

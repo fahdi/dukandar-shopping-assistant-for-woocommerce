@@ -202,6 +202,166 @@
 		panel.setAttribute('inert', '');
 	}
 
+	// ── Proactive, consented, value-gated nudge (issue #65) ─────────────────────
+	// A SINGLE, dismissible message offering REAL help. The decision to show one — and
+	// the message itself — is made SERVER-SIDE (Fahad_AI_Proactive): cfg.proactive is
+	// present ONLY when the merchant enabled it AND a grounded value signal exists right
+	// now (a coupon that actually applies, or unused store credit). The widget therefore
+	// can never invent a nudge or fabricate urgency; it only renders the grounded text
+	// and enforces the frequency cap + dismissal on the client.
+	//
+	// HARDENING (ROADMAP §6): no fake urgency (text is server-grounded); a per-visitor
+	// frequency cap; dismissal remembered (sessionStorage) so a dismissed nudge never
+	// reappears; merchant kill-switch (no cfg.proactive → nothing runs); shopper opt-out
+	// (Dismiss). Accessible: a labelled region, real <button>s (keyboard operable), Esc
+	// dismisses, and the message is announced via a polite live region (WCAG 2.2 AA).
+	(function initProactive() {
+		const p = cfg.proactive;
+		// Merchant kill-switch / no grounded value → the server sent nothing. Do nothing.
+		if (!p || !p.enabled || !p.message) return;
+
+		const cap = Number(p.frequencyCap) || 0;
+		if (cap <= 0) return; // Non-positive cap → never nudge (mirrors the server gate).
+
+		const storageKey = p.storageKey || 'fahad_ai_proactive_v1';
+
+		// Per-visitor state {shown:int, dismissed:bool}. sessionStorage scopes it to the
+		// session (a fresh tab/visit may nudge again, within the cap); a try/catch + an
+		// in-memory fallback means a privacy mode that blocks storage never throws (and
+		// degrades to at-most-once-per-page, never a loop).
+		let memFallback = null;
+		function readState() {
+			try {
+				const raw = window.sessionStorage.getItem(storageKey);
+				if (raw) return JSON.parse(raw);
+			} catch (e) { /* storage blocked — fall through */ }
+			return memFallback || { shown: 0, dismissed: false };
+		}
+		function writeState(state) {
+			memFallback = state;
+			try { window.sessionStorage.setItem(storageKey, JSON.stringify(state)); }
+			catch (e) { /* storage blocked — memFallback still enforces the cap this page */ }
+		}
+
+		// Client-side mirror of Fahad_AI_Proactive::is_eligible(): under cap, not
+		// dismissed. (enabled / value / positive-cap were already checked above.)
+		function eligible() {
+			const s = readState();
+			return !s.dismissed && (Number(s.shown) || 0) < cap;
+		}
+
+		if (!eligible()) return;
+
+		let nudgeEl = null;
+		let shown   = false;
+
+		function dismiss(persist) {
+			cleanupTriggers();
+			if (nudgeEl) { nudgeEl.remove(); nudgeEl = null; }
+			if (persist) {
+				const s = readState();
+				s.dismissed = true;
+				writeState(s);
+			}
+			// Return focus to the toggle so a keyboard user is not stranded.
+			if (toggle && toggle.style.display !== 'none') toggle.focus();
+		}
+
+		function showNudge() {
+			// Re-check at fire time: the panel may have been opened, or the cap reached
+			// in another flow, since the trigger was armed.
+			if (shown || isOpen() || !eligible()) { cleanupTriggers(); return; }
+			shown = true;
+			cleanupTriggers();
+
+			// Count the show immediately so a reload cannot replay it past the cap.
+			const s = readState();
+			s.shown = (Number(s.shown) || 0) + 1;
+			writeState(s);
+
+			nudgeEl = document.createElement('div');
+			nudgeEl.id = 'chatbot-nudge';
+			// A labelled region; polite live so AT announces it without stealing focus
+			// (it is an OFFER, not an interruption that demands a response).
+			nudgeEl.setAttribute('role', 'status');
+			nudgeEl.setAttribute('aria-live', 'polite');
+			nudgeEl.setAttribute('aria-label', i18n.proactiveLabel || 'A message from the store assistant');
+
+			const text = document.createElement('p');
+			text.className = 'chatbot-nudge-text';
+			text.textContent = p.message; // server-grounded; never markup.
+			nudgeEl.appendChild(text);
+
+			const actions = document.createElement('div');
+			actions.className = 'chatbot-nudge-actions';
+
+			const openBtn = document.createElement('button');
+			openBtn.type = 'button';
+			openBtn.className = 'chatbot-nudge-open';
+			openBtn.textContent = i18n.proactiveOpen || 'Open chat';
+			openBtn.addEventListener('click', () => { dismiss(true); openChat(); });
+			actions.appendChild(openBtn);
+
+			const dismissBtn = document.createElement('button');
+			dismissBtn.type = 'button';
+			dismissBtn.className = 'chatbot-nudge-dismiss';
+			dismissBtn.setAttribute('aria-label', i18n.proactiveDismiss || 'Dismiss this message');
+			const x = document.createElement('span');
+			x.setAttribute('aria-hidden', 'true');
+			x.textContent = '✕';
+			dismissBtn.appendChild(x);
+			dismissBtn.addEventListener('click', () => dismiss(true));
+			actions.appendChild(dismissBtn);
+
+			nudgeEl.appendChild(actions);
+
+			// Esc dismisses the nudge (a dismissed nudge is remembered).
+			nudgeEl.addEventListener('keydown', e => {
+				if (e.key === 'Escape') { e.preventDefault(); dismiss(true); }
+			});
+
+			root.appendChild(nudgeEl);
+			// Move focus to the primary action so a keyboard user reaches it immediately
+			// (the region is still announced via the polite live region above).
+			openBtn.focus();
+		}
+
+		// ── Triggers: real moments, never on load ──────────────────────────────────
+		// Idle-on-page (no interaction for a while) is the honest default; desktop also
+		// gets exit-intent (pointer leaving toward the top). Whichever fires first wins;
+		// opening the chat cancels both. The value is ALREADY grounded server-side, so
+		// these only choose WHEN to surface an offer that genuinely exists.
+		const IDLE_MS = 25000;
+		let idleTimer = null;
+
+		function armIdle() {
+			clearTimeout(idleTimer);
+			idleTimer = setTimeout(showNudge, IDLE_MS);
+		}
+		function onExitIntent(e) {
+			// Pointer leaving the top of the viewport (classic exit-intent), desktop only.
+			if (e.clientY <= 0) showNudge();
+		}
+		function cleanupTriggers() {
+			clearTimeout(idleTimer);
+			document.removeEventListener('mousemove', armIdle);
+			document.removeEventListener('keydown', armIdle);
+			document.removeEventListener('mouseout', onExitIntent);
+		}
+
+		// Reset the idle timer on interaction; arm exit-intent on pointer-capable devices.
+		document.addEventListener('mousemove', armIdle);
+		document.addEventListener('keydown', armIdle);
+		if (window.matchMedia && window.matchMedia('(pointer: fine)').matches) {
+			document.addEventListener('mouseout', onExitIntent);
+		}
+		armIdle();
+
+		// Opening the chat (by any path) retires the nudge for this session — the shopper
+		// engaged, so a later proactive interruption would be noise.
+		toggle.addEventListener('click', () => dismiss(true), { once: true });
+	})();
+
 	// ── Send ──────────────────────────────────────────────────────────────────
 	sendBtn.addEventListener('click', sendMessage);
 	input.addEventListener('keydown', e => {
