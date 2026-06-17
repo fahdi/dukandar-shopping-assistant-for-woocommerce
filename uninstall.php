@@ -35,6 +35,11 @@ $fahad_ai_options = [
 	'fahad_ai_token_budget',
 	'fahad_ai_fast_model_routing',
 	'fahad_ai_fast_model',
+	// Proactive, value-gated nudge (issue #65): the merchant kill-switch (default OFF)
+	// and the per-visit frequency cap. No PII (the nudge is computed per request from
+	// grounded store data; nothing is persisted about a shopper here).
+	'fahad_ai_proactive_enabled',
+	'fahad_ai_proactive_frequency',
 ];
 
 foreach ( $fahad_ai_options as $fahad_ai_option ) {

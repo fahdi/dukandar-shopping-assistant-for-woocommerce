@@ -700,6 +700,93 @@ a.chatbot-compare-name:hover {
 	opacity: .45;
 }
 
+/* ── Proactive nudge (issue #65) ──────────────────────────────────────────────
+   A small, dismissible card anchored just above the toggle. Shown ONLY when the
+   server supplied a grounded value signal; the copy is honest (no urgency) and the
+   controls are real, keyboard-operable buttons. */
+#chatbot-nudge {
+	position:       fixed;
+	bottom:         92px;
+	right:          24px;
+	width:          300px;
+	max-width:      calc(100vw - 48px);
+	background:     var(--chatbot-bg);
+	color:          var(--chatbot-text);
+	border:         1px solid var(--chatbot-border);
+	border-radius:  var(--chatbot-radius);
+	box-shadow:     0 8px 32px rgba(0, 0, 0, .15);
+	padding:        14px 16px;
+	z-index:        var(--chatbot-z);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	#chatbot-nudge {
+		animation: chatbot-nudge-in .2s ease-out;
+	}
+}
+
+@keyframes chatbot-nudge-in {
+	from { opacity: 0; transform: translateY(8px); }
+	to   { opacity: 1; transform: translateY(0); }
+}
+
+.chatbot-nudge-text {
+	margin:      0 0 10px;
+	font-size:   14px;
+	line-height: 1.4;
+}
+
+.chatbot-nudge-actions {
+	display:     flex;
+	align-items: center;
+	gap:         8px;
+}
+
+.chatbot-nudge-open {
+	flex:          1 1 auto;
+	background:    var(--chatbot-accent);
+	color:         var(--chatbot-accent-fg);
+	border:        none;
+	border-radius: 8px;
+	padding:       8px 12px;
+	font-size:     13px;
+	font-weight:   600;
+	cursor:        pointer;
+}
+
+.chatbot-nudge-open:hover { background: var(--chatbot-accent-dark); }
+
+.chatbot-nudge-dismiss {
+	flex:          0 0 auto;
+	background:    var(--chatbot-bot-bubble);
+	color:         var(--chatbot-text);
+	border:        1px solid var(--chatbot-border);
+	border-radius: 8px;
+	width:         32px;
+	height:        32px;
+	font-size:     14px;
+	line-height:   1;
+	cursor:        pointer;
+}
+
+/* High-contrast, accent-independent focus ring (matches the toggle/feedback
+   controls, WCAG 2.4.7 / 2.4.11). */
+.chatbot-nudge-open:focus-visible,
+.chatbot-nudge-dismiss:focus-visible {
+	outline:        2px solid #1a1a1a;
+	outline-offset: 2px;
+	box-shadow:     0 0 0 4px #ffffff;
+}
+
+@media (max-width: 480px) {
+	#chatbot-nudge {
+		right:  16px;
+		bottom: 88px;
+		width:  auto;
+		left:   16px;
+	}
+}
+
 /* ── Reduced motion safety net ────────────────────────────────────────────────
    Non-essential transitions/animations are opt-in via the no-preference queries
    above; this scoped catch-all neutralises anything that slips through (e.g. a

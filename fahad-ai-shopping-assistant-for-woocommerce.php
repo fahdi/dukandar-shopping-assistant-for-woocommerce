@@ -25,6 +25,7 @@ define( 'FAHAD_AI_URL', plugin_dir_url( __FILE__ ) );
 
 require_once FAHAD_AI_PATH . 'includes/class-auth.php';
 require_once FAHAD_AI_PATH . 'includes/class-feedback.php';
+require_once FAHAD_AI_PATH . 'includes/class-proactive.php';
 require_once FAHAD_AI_PATH . 'includes/class-tool-registry.php';
 require_once FAHAD_AI_PATH . 'includes/class-tools.php';
 require_once FAHAD_AI_PATH . 'includes/class-api-handler.php';
@@ -193,6 +194,10 @@ final class Fahad_AI_Chatbot {
 			'botName'     => get_option( 'fahad_ai_bot_name', __( 'Store Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ) ),
 			'greeting'    => get_option( 'fahad_ai_greeting', __( 'Hi! How can I help you today?', 'fahad-ai-shopping-assistant-for-woocommerce' ) ),
 			'accentColor' => get_option( 'fahad_ai_accent_color', '#2563eb' ),
+			// Proactive, consented, value-gated nudge (issue #65). Empty array unless the
+			// merchant enabled it AND a REAL value signal (an applicable coupon, or unused
+			// store credit) exists right now — so the widget can never invent a nudge.
+			'proactive'   => $this->proactive_config(),
 			'i18n'        => [
 				'openChat'           => __( 'Open chat assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ),
 				'closeChat'          => __( 'Close chat', 'fahad-ai-shopping-assistant-for-woocommerce' ),
@@ -245,8 +250,68 @@ final class Fahad_AI_Chatbot {
 				'feedbackUp'         => __( 'Mark this reply as helpful', 'fahad-ai-shopping-assistant-for-woocommerce' ),
 				'feedbackDown'       => __( 'Mark this reply as not helpful', 'fahad-ai-shopping-assistant-for-woocommerce' ),
 				'feedbackThanks'     => __( 'Thanks for the feedback.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+				// Proactive nudge (issue #65). The nudge MESSAGE itself is grounded server-side
+				// (proactive.message); these are the UI chrome strings around it.
+				'proactiveLabel'     => __( 'A message from the store assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+				'proactiveOpen'      => __( 'Open chat', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+				'proactiveDismiss'   => __( 'Dismiss this message', 'fahad-ai-shopping-assistant-for-woocommerce' ),
 			],
 		] );
+	}
+
+	/**
+	 * Build the proactive-nudge config for the widget (issue #65), or [] when no nudge
+	 * may be shown.
+	 *
+	 * Short-circuits to [] the instant the merchant kill-switch is off (default) — so a
+	 * store that has not opted in pays NOTHING: no cart load, no coupon query, no wallet
+	 * call. Only when enabled does it resolve a REAL value signal from the store's OWN
+	 * grounded tools (so the nudge can never be fabricated):
+	 *
+	 *   - list_active_coupons: returns only codes WooCommerce itself accepts right now
+	 *     (published, unexpired, within usage limits, applicable to the actual cart).
+	 *   - get_wallet_balance: login-gated centrally, so it yields a balance only for a
+	 *     logged-in shopper with a wallet provider; a guest / no-provider returns an
+	 *     error, which is treated as "no credit" (never a nudge).
+	 *
+	 * Fahad_AI_Proactive applies the value-gate + frequency cap and produces the
+	 * grounded, urgency-free message. The widget then enforces the cap + dismissal
+	 * client-side via the returned storageKey.
+	 *
+	 * @return array Empty array, or the widget's proactive config.
+	 */
+	private function proactive_config(): array {
+		$proactive = Fahad_AI_Proactive::instance();
+
+		// Kill-switch first: do no work at all when the merchant has not opted in.
+		if ( ! $proactive->enabled() ) {
+			return [];
+		}
+
+		// WooCommerce does not init the cart on every front-end request; load it so
+		// coupon applicability is determinable against the shopper's REAL cart (same
+		// reason the REST handlers call wc_load_cart()).
+		if ( function_exists( 'wc_load_cart' ) ) {
+			wc_load_cart();
+		}
+
+		$registry = Fahad_AI_Tool_Registry::instance();
+
+		// Grounded coupon list (honors merchant tool-gating: a disabled coupon tool
+		// simply yields no coupon signal).
+		$coupons = $registry->dispatch( 'list_active_coupons', [] );
+		$coupons = is_array( $coupons ) ? $coupons : [ 'found' => 0, 'coupons' => [] ];
+
+		// Grounded wallet balance. dispatch() login-gates this centrally; an error
+		// (guest / no provider / not found) is treated as "no credit".
+		$balance     = $registry->dispatch( 'get_wallet_balance', [] );
+		$balance_arr = ( is_array( $balance ) && ! isset( $balance['error'] ) && isset( $balance['amount'] ) )
+			? $balance
+			: null;
+
+		$signal = $proactive->value_signal( $coupons, $balance_arr );
+
+		return $proactive->config( $signal );
 	}
 
 	public function enqueue_admin_assets( string $hook ): void {
