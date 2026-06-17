@@ -1293,4 +1293,441 @@ class ApiHandlerTest extends TestCase {
 
         $this->prime_cart_session();
     }
+
+    // ── provider failover & graceful degradation (issue #58) ────────────────────
+    // A provider error/timeout/429 should fall back to the OTHER configured provider
+    // (reusing the configured order); with no provider available the shopper still
+    // gets a graceful, non-error response (product search + support), never a dead
+    // end. These pin the three small seams the dispatch wires together:
+    //   has_provider_key() — is a provider's key option non-empty?
+    //   provider_chain()   — ordered, key-filtered list to try (configured first).
+    //   degraded_response() — the friendly, NON-error fallback when all providers fail.
+
+    private function has_provider_key( string $provider ): bool {
+        $method = new ReflectionMethod( Fahad_AI_API_Handler::class, 'has_provider_key' );
+        return $method->invoke( $this->handler(), $provider );
+    }
+
+    private function provider_chain(): array {
+        $method = new ReflectionMethod( Fahad_AI_API_Handler::class, 'provider_chain' );
+        return $method->invoke( $this->handler() );
+    }
+
+    private function degraded_response( array $messages = [] ): array {
+        $method = new ReflectionMethod( Fahad_AI_API_Handler::class, 'degraded_response' );
+        return $method->invoke( $this->handler(), $messages );
+    }
+
+    // ── has_provider_key() ──────────────────────────────────────────────────────
+
+    public function test_has_provider_key_true_when_key_set(): void {
+        $this->set_option_alias( [
+            'fahad_ai_anthropic_api_key' => 'sk-ant-123',
+            'fahad_ai_moonshot_api_key'  => 'sk-moon-456',
+        ] );
+
+        $this->assertTrue( $this->has_provider_key( 'anthropic' ) );
+        $this->assertTrue( $this->has_provider_key( 'moonshot' ) );
+    }
+
+    public function test_has_provider_key_false_when_key_missing_or_empty(): void {
+        // setUp's get_option stub returns the default ('') for unset options, so both
+        // keys read as empty here.
+        $this->assertFalse( $this->has_provider_key( 'anthropic' ) );
+        $this->assertFalse( $this->has_provider_key( 'moonshot' ) );
+
+        // An explicitly empty string is also "no key".
+        $this->set_option_alias( [
+            'fahad_ai_anthropic_api_key' => '',
+            'fahad_ai_moonshot_api_key'  => '',
+        ] );
+        $this->assertFalse( $this->has_provider_key( 'anthropic' ) );
+        $this->assertFalse( $this->has_provider_key( 'moonshot' ) );
+    }
+
+    public function test_has_provider_key_reads_the_matching_option_per_provider(): void {
+        // Only the moonshot key is set → only moonshot reports true.
+        $this->set_option_alias( [ 'fahad_ai_moonshot_api_key' => 'sk-moon' ] );
+
+        $this->assertTrue( $this->has_provider_key( 'moonshot' ) );
+        $this->assertFalse( $this->has_provider_key( 'anthropic' ) );
+    }
+
+    // ── provider_chain() — configured provider first, key-filtered ──────────────
+
+    public function test_provider_chain_configured_moonshot_with_both_keys(): void {
+        // configured = moonshot, both keys present → moonshot first, anthropic fallback.
+        $this->set_option_alias( [
+            'fahad_ai_provider'          => 'moonshot',
+            'fahad_ai_anthropic_api_key' => 'sk-ant',
+            'fahad_ai_moonshot_api_key'  => 'sk-moon',
+        ] );
+
+        $this->assertSame( [ 'moonshot', 'anthropic' ], $this->provider_chain() );
+    }
+
+    public function test_provider_chain_configured_anthropic_with_both_keys(): void {
+        // configured = anthropic, both keys present → anthropic first, moonshot fallback.
+        $this->set_option_alias( [
+            'fahad_ai_provider'          => 'anthropic',
+            'fahad_ai_anthropic_api_key' => 'sk-ant',
+            'fahad_ai_moonshot_api_key'  => 'sk-moon',
+        ] );
+
+        $this->assertSame( [ 'anthropic', 'moonshot' ], $this->provider_chain() );
+    }
+
+    public function test_provider_chain_defaults_to_anthropic_first_when_provider_unset(): void {
+        // The provider option defaults to 'anthropic' (matching handle_message's
+        // existing default), so with both keys the chain leads with anthropic.
+        $this->set_option_alias( [
+            'fahad_ai_anthropic_api_key' => 'sk-ant',
+            'fahad_ai_moonshot_api_key'  => 'sk-moon',
+        ] );
+
+        $this->assertSame( [ 'anthropic', 'moonshot' ], $this->provider_chain() );
+    }
+
+    public function test_provider_chain_filters_out_provider_without_key(): void {
+        // configured = anthropic but ONLY the anthropic key exists → chain is just
+        // [anthropic]; the keyless moonshot is filtered out (no pointless fallback).
+        $this->set_option_alias( [
+            'fahad_ai_provider'          => 'anthropic',
+            'fahad_ai_anthropic_api_key' => 'sk-ant',
+        ] );
+
+        $this->assertSame( [ 'anthropic' ], $this->provider_chain() );
+    }
+
+    public function test_provider_chain_fallback_only_when_configured_provider_keyless(): void {
+        // configured = anthropic but only the MOONSHOT key exists. The configured
+        // provider has no key, so the chain is just the keyed fallback [moonshot].
+        $this->set_option_alias( [
+            'fahad_ai_provider'         => 'anthropic',
+            'fahad_ai_moonshot_api_key' => 'sk-moon',
+        ] );
+
+        $this->assertSame( [ 'moonshot' ], $this->provider_chain() );
+    }
+
+    public function test_provider_chain_empty_when_no_keys(): void {
+        // No keys configured at all → empty chain (handle_message keeps its existing
+        // no-key WP_Error in this case).
+        $this->set_option_alias( [ 'fahad_ai_provider' => 'moonshot' ] );
+
+        $this->assertSame( [], $this->provider_chain() );
+    }
+
+    public function test_provider_chain_has_no_duplicates(): void {
+        // Each provider appears at most once regardless of configuration — the
+        // dispatch tries each provider a single time (bounded, no loop).
+        $this->set_option_alias( [
+            'fahad_ai_provider'          => 'moonshot',
+            'fahad_ai_anthropic_api_key' => 'sk-ant',
+            'fahad_ai_moonshot_api_key'  => 'sk-moon',
+        ] );
+
+        $chain = $this->provider_chain();
+
+        $this->assertSame( $chain, array_values( array_unique( $chain ) ) );
+        $this->assertLessThanOrEqual( 2, count( $chain ) );
+    }
+
+    // ── degraded_response() — friendly, NON-error fallback ──────────────────────
+
+    public function test_degraded_response_shape_is_a_friendly_non_error(): void {
+        $result = $this->degraded_response();
+
+        // A non-empty friendly message (never a raw error / blank).
+        $this->assertArrayHasKey( 'message', $result );
+        $this->assertIsString( $result['message'] );
+        $this->assertNotEmpty( $result['message'] );
+
+        // Explicitly flagged degraded, and carries the empty card/comparison shape so
+        // the widget renders consistently.
+        $this->assertTrue( $result['degraded'] );
+        $this->assertSame( [], $result['products'] );
+        $this->assertSame( [], $result['comparison'] );
+
+        // It is NOT an error payload — no `error` key, never a dead end.
+        $this->assertArrayNotHasKey( 'error', $result );
+    }
+
+    public function test_degraded_response_message_points_to_search_and_support(): void {
+        // The friendly copy must keep the shopper moving: it should mention they can
+        // still browse/search the store AND reach support (the human handoff). This
+        // is the "never a dead end" guarantee in prose.
+        $message = strtolower( $this->degraded_response()['message'] );
+
+        $this->assertStringContainsString( 'search', $message );
+        $this->assertStringContainsString( 'support', $message );
+    }
+
+    public function test_degraded_response_message_leaks_no_secret_or_exception(): void {
+        // Hardening: the friendly message must never surface a key or raw exception
+        // text. Even with keys configured, the degraded copy is generic.
+        $this->set_option_alias( [
+            'fahad_ai_anthropic_api_key' => 'sk-ant-SECRET',
+            'fahad_ai_moonshot_api_key'  => 'sk-moon-SECRET',
+        ] );
+
+        $message = $this->degraded_response()['message'];
+
+        $this->assertStringNotContainsString( 'sk-ant-SECRET', $message );
+        $this->assertStringNotContainsString( 'sk-moon-SECRET', $message );
+        $this->assertStringNotContainsString( 'Exception', $message );
+    }
+
+    public function test_degraded_response_carries_the_messages_passed_in(): void {
+        // The conversation transcript is echoed back so the client keeps its history
+        // intact after a degraded turn.
+        $messages = [
+            [ 'role' => 'user', 'content' => 'find me running shoes' ],
+            [ 'role' => 'assistant', 'content' => 'sure, one sec' ],
+        ];
+
+        $result = $this->degraded_response( $messages );
+
+        $this->assertSame( $messages, $result['messages'] );
+    }
+
+    public function test_degraded_response_defaults_messages_to_empty_array(): void {
+        $result = $this->degraded_response();
+
+        $this->assertArrayHasKey( 'messages', $result );
+        $this->assertSame( [], $result['messages'] );
+    }
+
+    // ── handle_message() dispatch — failover + graceful degradation ─────────────
+    // The non-streaming endpoint builds provider_chain() and tries each provider in
+    // order: it returns the first non-WP_Error result, falls THROUGH to the next
+    // provider on a WP_Error, and returns degraded_response() (NOT an error) only
+    // after every provider has failed. With no key at all it keeps the existing
+    // no-key WP_Error.
+    //
+    // Fahad_AI_API_Handler is `final`, so we do NOT partial-mock it (Mockery cannot
+    // replace methods on a final class). Instead we drive the REAL dispatch end to
+    // end — handle_message → run_*_agent → call_* → wp_remote_post — against a
+    // SCRIPTED transport (the eval-harness pattern). wp_remote_post is routed BY URL
+    // so we can make one provider's endpoint fail and the other succeed, exercising
+    // the actual failover wiring rather than a mocked seam. Each canned turn is a
+    // single end_turn/stop (no tool calls), so no WC tool mocks are needed.
+
+    private function message_request( array $messages ) {
+        $req = Mockery::mock( 'WP_REST_Request' );
+        $req->shouldReceive( 'get_param' )->with( 'messages' )->andReturn( $messages );
+        return $req;
+    }
+
+    /**
+     * Stub rest_ensure_response to wrap a payload in a WP_REST_Response-shaped mock
+     * exposing get_data(). handle_message() is type-hinted to return
+     * WP_REST_Response|WP_Error, so (unlike the eval harness, which calls the private
+     * agent loops directly) the identity stub would violate the return type. Mockery
+     * auto-defines the WP_REST_Response class, mirroring how the suite already mocks
+     * WP_REST_Request. A WP_Error passed in is returned as-is (matches real WP).
+     */
+    private function stub_rest_ensure_response(): void {
+        // handle_message() calls wc_load_cart() (guarded by function_exists). In
+        // isolation the function is undefined so the guard skips it; but once another
+        // suite (e.g. the eval cases) has mocked wc_load_cart via Brain\Monkey it
+        // becomes "known", so the guard runs it and Brain\Monkey demands a per-test
+        // expectation. Stub it as a harmless no-op so this test is order-independent.
+        Functions\when( 'wc_load_cart' )->justReturn( null );
+
+        Functions\when( 'rest_ensure_response' )->alias( static function ( $data ) {
+            if ( $data instanceof WP_Error ) {
+                return $data;
+            }
+            $resp = Mockery::mock( 'WP_REST_Response' );
+            $resp->shouldReceive( 'get_data' )->andReturn( $data );
+            return $resp;
+        } );
+    }
+
+    /** Read the payload out of a handle_message() return (WP_REST_Response mock). */
+    private function response_data( $response ): array {
+        return $response->get_data();
+    }
+
+    /** Anthropic non-streaming final-answer body (stop_reason end_turn). */
+    private function anthropic_answer( string $text ): array {
+        return [ 'stop_reason' => 'end_turn', 'content' => [ [ 'type' => 'text', 'text' => $text ] ] ];
+    }
+
+    /** Moonshot non-streaming final-answer body (finish_reason stop). */
+    private function moonshot_answer( string $text ): array {
+        return [ 'choices' => [ [ 'finish_reason' => 'stop', 'message' => [ 'role' => 'assistant', 'content' => $text ] ] ] ];
+    }
+
+    /**
+     * Stub the agent-loop transport, routing by request URL so each provider can be
+     * made to succeed or fail independently. A handler returns either a body array
+     * (→ HTTP 200) or an [ 'code' => int, 'body' => array ] wrapper for a non-200
+     * (which call_* turns into a WP_Error). Also stubs the wp_remote_retrieve_* and
+     * encode helpers the loop relies on, and records how many times each provider
+     * endpoint was hit so the tests can assert bounded, at-most-once tries.
+     *
+     * @param callable $anthropic fn(): array  Response for the Anthropic endpoint.
+     * @param callable $moonshot  fn(): array  Response for the Moonshot endpoint.
+     * @return ArrayObject Live call counter: $counts['anthropic'] / $counts['moonshot'].
+     *                     An ArrayObject (not a plain array) so the closure and the
+     *                     test share ONE instance by reference — a returned array would
+     *                     be a value copy taken before any request was made.
+     */
+    private function route_transport( callable $anthropic, callable $moonshot ): ArrayObject {
+        $counts = new ArrayObject( [ 'anthropic' => 0, 'moonshot' => 0 ] );
+
+        Functions\when( 'wp_json_encode' )->alias( static fn( $d ) => json_encode( $d ) );
+
+        Functions\when( 'wp_remote_post' )->alias(
+            static function ( $url, $args = [] ) use ( $anthropic, $moonshot, $counts ) {
+                $is_anthropic = str_contains( (string) $url, 'anthropic' );
+                $key          = $is_anthropic ? 'anthropic' : 'moonshot';
+                $counts[ $key ]++;
+                $resp = $is_anthropic ? $anthropic() : $moonshot();
+
+                if ( isset( $resp['code'] ) && isset( $resp['body'] ) ) {
+                    return [ '__eval' => true, 'code' => $resp['code'], 'body' => json_encode( $resp['body'] ) ];
+                }
+                return [ '__eval' => true, 'code' => 200, 'body' => json_encode( $resp ) ];
+            }
+        );
+
+        Functions\when( 'wp_remote_retrieve_response_code' )->alias(
+            static fn( $r ) => is_array( $r ) ? ( $r['code'] ?? 0 ) : 0
+        );
+        Functions\when( 'wp_remote_retrieve_body' )->alias(
+            static fn( $r ) => is_array( $r ) ? ( $r['body'] ?? '' ) : ''
+        );
+
+        return $counts;
+    }
+
+    public function test_handle_message_no_keys_returns_existing_no_key_error(): void {
+        // No provider key configured → empty chain → the existing no-key WP_Error is
+        // preserved (admin-facing signal that configuration is incomplete).
+        Functions\when( 'sanitize_textarea_field' )->returnArg();
+        $this->stub_rest_ensure_response();
+
+        $result = $this->handler()->handle_message(
+            $this->message_request( [ [ 'role' => 'user', 'content' => 'hi' ] ] )
+        );
+
+        $this->assertTrue( is_wp_error( $result ), 'With no key, the no-key WP_Error must be preserved.' );
+    }
+
+    public function test_handle_message_returns_primary_result_on_success(): void {
+        // configured = moonshot with a key → moonshot is tried first; on success its
+        // result is returned and the anthropic endpoint is never called.
+        $this->set_option_alias( [
+            'fahad_ai_provider'         => 'moonshot',
+            'fahad_ai_moonshot_api_key' => 'sk-moon',
+        ] );
+        Functions\when( 'sanitize_textarea_field' )->returnArg();
+        Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => $value );
+        $this->stub_rest_ensure_response();
+
+        $counter = $this->route_transport(
+            fn() => $this->fail( 'anthropic must not be called when moonshot succeeds' ),
+            fn() => $this->moonshot_answer( 'moonshot says hi' )
+        );
+
+        $result = $this->response_data( $this->handler()->handle_message(
+            $this->message_request( [ [ 'role' => 'user', 'content' => 'hi' ] ] )
+        ) );
+
+        $this->assertSame( 'moonshot says hi', $result['message'] );
+        $this->assertArrayNotHasKey( 'degraded', $result, 'A successful turn is not degraded.' );
+        $this->assertSame( 0, $counter['anthropic'] );
+        $this->assertSame( 1, $counter['moonshot'] );
+    }
+
+    public function test_handle_message_falls_back_to_secondary_on_primary_error(): void {
+        // configured = moonshot, both keys → primary (moonshot) returns a 429. The
+        // dispatch transparently falls back to anthropic and returns ITS result.
+        // Bounded: each provider endpoint is hit exactly once.
+        $this->set_option_alias( [
+            'fahad_ai_provider'          => 'moonshot',
+            'fahad_ai_anthropic_api_key' => 'sk-ant',
+            'fahad_ai_moonshot_api_key'  => 'sk-moon',
+        ] );
+        Functions\when( 'sanitize_textarea_field' )->returnArg();
+        Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => $value );
+        $this->stub_rest_ensure_response();
+
+        $counter = $this->route_transport(
+            fn() => $this->anthropic_answer( 'anthropic to the rescue' ),
+            fn() => [ 'code' => 429, 'body' => [ 'error' => [ 'message' => 'rate limited' ] ] ]
+        );
+
+        $result = $this->response_data( $this->handler()->handle_message(
+            $this->message_request( [ [ 'role' => 'user', 'content' => 'hi' ] ] )
+        ) );
+
+        $this->assertSame( 'anthropic to the rescue', $result['message'] );
+        $this->assertArrayNotHasKey( 'degraded', $result, 'A successful fallback is not degraded.' );
+        $this->assertSame( 1, $counter['moonshot'], 'primary tried once' );
+        $this->assertSame( 1, $counter['anthropic'], 'fallback tried once' );
+    }
+
+    public function test_handle_message_degrades_gracefully_when_all_providers_fail(): void {
+        // Both providers keyed but BOTH error (502) → no dead end: a degraded_response
+        // is returned (NOT a WP_Error), each provider endpoint hit exactly once
+        // (bounded retries, cost does not balloon), and no key leaks into the copy.
+        $this->set_option_alias( [
+            'fahad_ai_provider'          => 'moonshot',
+            'fahad_ai_anthropic_api_key' => 'sk-ant-SECRET',
+            'fahad_ai_moonshot_api_key'  => 'sk-moon-SECRET',
+        ] );
+        Functions\when( 'sanitize_textarea_field' )->returnArg();
+        Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => $value );
+        $this->stub_rest_ensure_response();
+
+        $counter = $this->route_transport(
+            fn() => [ 'code' => 502, 'body' => [ 'error' => [ 'message' => 'anthropic down' ] ] ],
+            fn() => [ 'code' => 502, 'body' => [ 'error' => [ 'message' => 'moonshot down' ] ] ]
+        );
+
+        $response = $this->handler()->handle_message(
+            $this->message_request( [ [ 'role' => 'user', 'content' => 'hi' ] ] )
+        );
+
+        $this->assertFalse( is_wp_error( $response ), 'Total failure must NOT surface as an error.' );
+        $result = $this->response_data( $response );
+        $this->assertTrue( $result['degraded'] );
+        $this->assertNotEmpty( $result['message'] );
+        $this->assertStringNotContainsString( 'SECRET', $result['message'] );
+        $this->assertArrayNotHasKey( 'error', $result );
+
+        // Bounded: at most one attempt per provider — no loop.
+        $this->assertSame( 1, $counter['moonshot'] );
+        $this->assertSame( 1, $counter['anthropic'] );
+    }
+
+    public function test_handle_message_single_provider_path_is_unchanged_on_success(): void {
+        // The existing single-provider happy path: configured = anthropic, only the
+        // anthropic key → chain is [anthropic], its result returns verbatim and the
+        // moonshot endpoint is never touched.
+        $this->set_option_alias( [
+            'fahad_ai_provider'          => 'anthropic',
+            'fahad_ai_anthropic_api_key' => 'sk-ant',
+        ] );
+        Functions\when( 'sanitize_textarea_field' )->returnArg();
+        Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => $value );
+        $this->stub_rest_ensure_response();
+
+        $counter = $this->route_transport(
+            fn() => $this->anthropic_answer( 'anthropic single-provider' ),
+            fn() => $this->fail( 'moonshot must not be called on the single-provider anthropic path' )
+        );
+
+        $result = $this->response_data( $this->handler()->handle_message(
+            $this->message_request( [ [ 'role' => 'user', 'content' => 'hi' ] ] )
+        ) );
+
+        $this->assertSame( 'anthropic single-provider', $result['message'] );
+        $this->assertSame( 1, $counter['anthropic'] );
+        $this->assertSame( 0, $counter['moonshot'] );
+    }
 }
