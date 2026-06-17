@@ -4,7 +4,7 @@ Tags: woocommerce, chatbot, ai, cart, assistant
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 2.1.0
+Stable tag: 2.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -97,6 +97,13 @@ The conversation history (user messages and assistant replies) and the results o
 
 == Changelog ==
 
+= 2.2.0 =
+New shopper features.
+
+* Reorder / buy-it-again: logged-in customers can see what they've bought before and re-add available items in one step (each revalidated for current price and stock; sold-out items are reported, not silently dropped).
+* Size & fit advice: the assistant surfaces a product's size options and any size chart, and offers a "runs small / true to size / runs large" hint — but only when the store's own reviews or a fit attribute support it, never invented.
+* "Complete the look" bundles: an optional suggested bundle of complementary items with an honest combined price (a saving is shown only when items are genuinely on sale), respecting stock and any stated budget.
+
 = 2.1.0 =
 New: direct, verified Add-to-cart from chat product cards.
 
@@ -185,6 +192,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.2.0 =
+Adds reorder/buy-it-again, grounded size & fit advice, and optional "complete the look" bundles. Backward compatible; no settings changes.
 
 = 2.1.0 =
 Adds instant, reliable Add-to-cart from chat product cards (no AI round-trip). Backward compatible; no settings changes.
