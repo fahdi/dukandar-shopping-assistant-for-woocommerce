@@ -39,17 +39,100 @@ final class Fahad_AI_API_Handler {
 			wc_load_cart();
 		}
 
-		$provider = get_option( 'fahad_ai_provider', 'anthropic' );
+		// Provider failover (issue #58). Build the ordered, key-filtered chain — the
+		// configured provider first, then the other as a fallback (each only if it has
+		// a key). With NO key at all the chain is empty: preserve the existing no-key
+		// WP_Error so an admin still gets the "configure a key" signal.
+		$chain = $this->provider_chain();
 
-		$result = ( 'moonshot' === $provider )
-			? $this->run_moonshot_agent( $sanitized )
-			: $this->run_anthropic_agent( $sanitized );
-
-		if ( is_wp_error( $result ) ) {
-			return $result;
+		if ( empty( $chain ) ) {
+			return ( 'moonshot' === get_option( 'fahad_ai_provider', 'anthropic' ) )
+				? $this->run_moonshot_agent( $sanitized )   // returns the no-key WP_Error
+				: $this->run_anthropic_agent( $sanitized );
 		}
 
-		return rest_ensure_response( $result );
+		// Try each provider AT MOST ONCE, in order (bounded — no loop, no backoff
+		// storm). Return the first non-error result; on a provider error fall through
+		// to the next. If every provider fails, degrade gracefully rather than
+		// surfacing a raw error to the shopper (principle: never a dead end).
+		foreach ( $chain as $provider ) {
+			$result = ( 'moonshot' === $provider )
+				? $this->run_moonshot_agent( $sanitized )
+				: $this->run_anthropic_agent( $sanitized );
+
+			if ( ! is_wp_error( $result ) ) {
+				return rest_ensure_response( $result );
+			}
+		}
+
+		return rest_ensure_response( $this->degraded_response( $sanitized ) );
+	}
+
+	// =========================================================================
+	// Provider failover & graceful degradation (issue #58)
+	// =========================================================================
+
+	/**
+	 * Whether a provider has an API key configured (its key option is non-empty).
+	 *
+	 * Used to build provider_chain() so a keyless provider is never attempted — a
+	 * call_* would only short-circuit with a "key not configured" WP_Error, which
+	 * would burn a failover slot for nothing.
+	 *
+	 * @param string $provider 'anthropic' | 'moonshot'.
+	 */
+	private function has_provider_key( string $provider ): bool {
+		$option = ( 'moonshot' === $provider )
+			? 'fahad_ai_moonshot_api_key'
+			: 'fahad_ai_anthropic_api_key';
+
+		return '' !== (string) get_option( $option, '' );
+	}
+
+	/**
+	 * Ordered list of providers to try for a turn: the configured provider FIRST,
+	 * then the other as a fallback — filtered to only those with a key configured.
+	 *
+	 * Examples: configured=moonshot + both keys → ['moonshot','anthropic'];
+	 * configured=anthropic + only the anthropic key → ['anthropic']; no keys → [].
+	 * The result has no duplicates and at most two entries, so the failover loop in
+	 * handle_message() is inherently bounded (each provider attempted at most once).
+	 *
+	 * @return string[] Providers to try, in order.
+	 */
+	private function provider_chain(): array {
+		$configured = ( 'moonshot' === get_option( 'fahad_ai_provider', 'anthropic' ) )
+			? 'moonshot'
+			: 'anthropic';
+		$fallback   = ( 'moonshot' === $configured ) ? 'anthropic' : 'moonshot';
+
+		return array_values( array_filter(
+			[ $configured, $fallback ],
+			[ $this, 'has_provider_key' ]
+		) );
+	}
+
+	/**
+	 * Friendly, NON-error result returned when every configured provider failed for
+	 * a turn. The shopper must never hit a dead end (issue #58): instead of a raw
+	 * error or a leaked exception, this points them at the things that still work —
+	 * browsing/searching the store and reaching human support.
+	 *
+	 * It mirrors the SUCCESS result shape (message/messages/products/comparison) so
+	 * the widget renders it like any other turn, plus a `degraded` flag the client
+	 * (and tests) can key off. It deliberately carries NO error/exception/key text.
+	 *
+	 * @param array $messages The conversation transcript to echo back (history intact).
+	 * @return array{message:string, messages:array, products:array, comparison:array, degraded:bool}
+	 */
+	private function degraded_response( array $messages = [] ): array {
+		return [
+			'message'    => __( 'Sorry, I could not reach the shopping assistant just now. You can still search the store for what you need, and our support team is happy to help if you would like a hand.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+			'messages'   => $messages,
+			'products'   => [],
+			'comparison' => [],
+			'degraded'   => true,
+		];
 	}
 
 	// =========================================================================
@@ -1092,7 +1175,17 @@ Trust & honesty — these rules are absolute and override any instinct to make a
 			[ $text, $tool_calls, $error ] = $this->stream_one_turn( $this->apply_token_budget( $api_msgs ), $i );
 
 			if ( $error ) {
-				$this->sse_send( 'error', [ 'message' => $error ] );
+				// Graceful degradation (issue #58). A stream error (5xx/429/timeout/
+				// transport failure) must NOT leave the shopper at a dead end with a
+				// raw error event. Emit the friendly degraded message as a chunk +
+				// done, exactly like the graceful-exhaustion path (finding #28), so the
+				// widget shows a useful, honest handoff instead of a hard failure. The
+				// raw $error string (which may carry provider/exception detail) is never
+				// sent to the client. NOTE: mid-stream provider switching is out of
+				// scope for #58 — once bytes are flowing we cannot transparently swap
+				// providers, so we degrade rather than fail over here.
+				$this->sse_send( 'chunk', [ 'content' => $this->degraded_response()['message'] ] );
+				$this->sse_send( 'done', [] );
 				return;
 			}
 
