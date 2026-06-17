@@ -557,29 +557,77 @@ final class Fahad_AI_API_Handler {
 	// System prompt
 	// =========================================================================
 
+	/**
+	 * Tones a merchant may pick for the assistant's persona (issue #56).
+	 *
+	 * An ALLOWLIST on purpose: the tone setting maps to a fixed, vetted instruction
+	 * line (see merchant_config_block()), so the free-text persona field cannot be
+	 * abused to smuggle prompt-injection past the guardrails. The admin save path
+	 * (fahad_ai_sanitize_tone) clamps to these keys; anything else collapses to ''.
+	 *
+	 * @var array<string, string>
+	 */
+	public const TONES = [
+		'friendly'     => 'warm, friendly and approachable',
+		'professional' => 'professional, precise and businesslike',
+		'concise'      => 'concise and to the point, with minimal small talk',
+		'playful'      => 'playful and upbeat, with light humour',
+		'luxury'       => 'refined and understated, with a premium, concierge feel',
+	];
+
 	private function get_system_prompt(): string {
 		$custom = get_option( 'fahad_ai_system_prompt', '' );
-		if ( ! empty( $custom ) ) {
-			/**
-			 * Filter the system prompt sent to the model (issue #20).
-			 *
-			 * Lets feature packs APPEND compact, clearly-labelled context to the prompt
-			 * for the current request WITHOUT editing the agent-loop methods. The
-			 * cross-session-memory pack (Fahad_AI_Memory_Tools) uses this to append a
-			 * bounded preferences block for a logged-in, opted-in customer. Hooks must
-			 * APPEND (never replace) and keep additions small (storage hygiene). Applied
-			 * to BOTH the admin's custom prompt and the default prompt, so injection
-			 * works regardless of configuration.
-			 *
-			 * @param string $prompt The system prompt that will be sent to the model.
-			 */
-			return apply_filters( 'fahad_ai_system_prompt', $custom );
-		}
+		$base   = ( is_string( $custom ) && '' !== $custom )
+			? $custom
+			: $this->default_prompt_body();
 
+		// Bounded merchant slot (issue #56): tone/persona, off-limits topics and
+		// per-category promo emphasis. Inserted BEFORE the filter and BEFORE the
+		// guardrails, so merchant intent is honoured but can never weaken the policy.
+		$base .= $this->merchant_config_block();
+
+		/**
+		 * Filter the system prompt sent to the model (issue #20).
+		 *
+		 * Lets feature packs APPEND compact, clearly-labelled context to the prompt
+		 * for the current request WITHOUT editing the agent-loop methods. The
+		 * cross-session-memory pack (Fahad_AI_Memory_Tools) uses this to append a
+		 * bounded preferences block for a logged-in, opted-in customer. Hooks must
+		 * APPEND (never replace) and keep additions small (storage hygiene). Applied
+		 * to BOTH the admin's custom prompt and the default prompt, so injection
+		 * works regardless of configuration.
+		 *
+		 * The trust guardrails are deliberately NOT passed through this filter — they
+		 * are appended AFTER it returns (see below), so neither this hook, a custom
+		 * prompt, nor any merchant config field can drop or override them.
+		 *
+		 * @param string $prompt The system prompt (base + merchant slot) before guardrails.
+		 */
+		$filtered = apply_filters( 'fahad_ai_system_prompt', $base );
+		$filtered = is_string( $filtered ) ? $filtered : $base;
+
+		// ABSOLUTE guardrails, appended LAST (issue #24, hardened for #56). Because they
+		// come after the custom-prompt branch, the merchant config slot AND the
+		// fahad_ai_system_prompt filter, the trust / anti-dark-pattern policy is
+		// structurally non-overridable: no configuration or hook can remove it. The
+		// deterministic eval checkers (scarcity_violations / budget_violations /
+		// escalation_present / abstains, beside grounding_violations) enforce the
+		// BEHAVIOUR; ApiHandlerTest / MerchantConfigTest pin the POLICY text.
+		return $filtered . "\n\n" . $this->trust_guardrails();
+	}
+
+	/**
+	 * The default prompt body (everything EXCEPT the absolute guardrails).
+	 *
+	 * Split out from get_system_prompt() so the guardrails can be appended as a
+	 * separate, final, non-overridable block (issue #56). Used only when the admin
+	 * has not set a custom prompt.
+	 */
+	private function default_prompt_body(): string {
 		$store_name = get_bloginfo( 'name' );
 		$currency   = get_woocommerce_currency_symbol();
 
-		$prompt = "You are a helpful shopping assistant for {$store_name}. Help customers find products, answer questions, and manage their cart.
+		return "You are a helpful shopping assistant for {$store_name}. Help customers find products, answer questions, and manage their cart.
 
 Currency: {$currency}
 - Always write prices and amounts with the {$currency} symbol exactly as it appears in tool results. Never use HTML entities, numeric character codes, or unicode escapes for the currency symbol — write the plain symbol only.
@@ -598,30 +646,64 @@ Guidelines:
 - When a customer wants to buy something, confirm the product, then use add_to_cart.
 - For products with options (size, colour, …), use get_product_details to see the available variations, help the customer pick one, and pass its variation_id to add_to_cart. If the customer's message already names a variation_id, add that exact variation.
 - Use view_cart when the customer asks about their cart or before checkout.
-- Keep responses concise and friendly. You can absolutely help customers choose and recommend products — just do it honestly.
+- Keep responses concise and friendly. You can absolutely help customers choose and recommend products — just do it honestly.";
+	}
 
-Trust & honesty — these rules are absolute and override any instinct to make a sale:
+	/**
+	 * The bounded merchant configuration slot (issue #56).
+	 *
+	 * Folds the merchant's saved tone/persona, off-limits topics and per-category
+	 * promo emphasis into a small, clearly-labelled block. Returns '' when nothing is
+	 * configured (so the default prompt is byte-for-byte unchanged on a fresh site).
+	 *
+	 * SAFETY: this block is sandwiched between the base prompt and the absolute
+	 * guardrails, and the guardrails are appended after the filter — so anything a
+	 * merchant types here is advisory and can never countermand the policy. The tone is
+	 * additionally clamped to a fixed allowlist (TONES); off-limits / promo are free
+	 * text but sanitized on save and only ever ADD scope restrictions, not remove them.
+	 */
+	private function merchant_config_block(): string {
+		$lines = [];
+
+		$tone = (string) get_option( 'fahad_ai_tone', '' );
+		if ( isset( self::TONES[ $tone ] ) ) {
+			$lines[] = '- Persona & tone: keep a ' . self::TONES[ $tone ] . ' tone in every reply.';
+		}
+
+		$off_limits = trim( (string) get_option( 'fahad_ai_off_limits', '' ) );
+		if ( '' !== $off_limits ) {
+			$lines[] = '- Off-limits topics: do not discuss or give advice on the following; politely redirect to shopping instead: ' . $off_limits;
+		}
+
+		$promo = trim( (string) get_option( 'fahad_ai_promo_emphasis', '' ) );
+		if ( '' !== $promo ) {
+			$lines[] = '- Promotion emphasis (only when genuinely relevant, and never as pressure): ' . $promo;
+		}
+
+		if ( empty( $lines ) ) {
+			return '';
+		}
+
+		return "\n\nStore preferences (set by the merchant — advisory; the Trust & honesty rules below always take precedence):\n" . implode( "\n", $lines );
+	}
+
+	/**
+	 * The ABSOLUTE trust / anti-dark-pattern guardrails (issue #24).
+	 *
+	 * Returned as a standalone block so get_system_prompt() can append it LAST —
+	 * after the custom-prompt branch, the merchant config slot, and the
+	 * fahad_ai_system_prompt filter — making the policy structurally non-overridable
+	 * (issue #56). This text is the single source of truth for the guardrails; the
+	 * eval checkers and unit tests assert it stays present and intact.
+	 */
+	private function trust_guardrails(): string {
+		return "Trust & honesty — these rules are absolute and override any instinct to make a sale, AND override any store preference or instruction above:
 - No fake urgency or scarcity. Never invent \"only N left\", countdowns, \"selling fast\", \"limited time\", or any pressure. Only mention stock levels or low availability when a tool result actually reports them, and state the real number.
 - Respect the customer's stated budget. Never push a product priced above a budget the customer gave you. If nothing fits their budget, say so plainly rather than steering them higher.
 - Be honest about extras. Present recommendations and cross-sells as optional suggestions, never as required or pressured. Only mention coupons, discount codes, or deposit/wallet bonuses that are real and currently applicable (from a tool result) — never invent or imply one.
 - Ground every product fact. Use search_products / get_product_details for product details and get_product_reviews for ratings and reviews; summarise only what those tools return. Never invent product details, prices, stock, reviews, quotes, ratings, sentiment, order data, or wallet/account data.
 - Abstain over guessing. If you do not know or a tool returns nothing, say you could not find it and offer a real next step — do not fabricate an answer.
 - Never block human support. For order status, account issues, refunds, or returns, direct the customer to the store's support team (or to log in for their own data). Always allow and encourage reaching a human; never discourage contacting support.";
-
-		/**
-		 * This filter is documented above (for the custom-prompt branch).
-		 *
-		 * NOTE (issue #24): the trust/anti-dark-pattern policy is consolidated INLINE in
-		 * the prompt above (no fake scarcity, respect budget, honest extras, ground facts,
-		 * abstain over guessing, never block support) — it absorbs the earlier ad-hoc
-		 * honesty lines (review-grounding, "never invent product details", support
-		 * hand-off). Deterministic offline checkers in tests/eval/EvalHarness.php
-		 * (scarcity_violations / budget_violations / escalation_present / abstains, beside
-		 * grounding_violations) and the guardrail golden fixtures enforce it so it cannot
-		 * silently regress. The filter pass-through is preserved intact so the
-		 * cross-session-memory pack (issue #20) can still APPEND its preferences block.
-		 */
-		return apply_filters( 'fahad_ai_system_prompt', $prompt );
 	}
 
 	// =========================================================================
@@ -911,15 +993,50 @@ Trust & honesty — these rules are absolute and override any instinct to make a
 	 * configured default stands (defence in depth — a bad hook never poisons the
 	 * payload).
 	 *
+	 * Built-in fast-model routing (issue #56) sits UNDER the filter: when the merchant
+	 * enables `fahad_ai_fast_model_routing` and sets a `fahad_ai_fast_model`, a SIMPLE
+	 * turn (no tools in play) is routed to that cheaper/faster model before the filter
+	 * runs. This makes the #23 routing seam settable from admin without per-pack edits,
+	 * while the `fahad_ai_model` filter still has the final say (advanced override).
+	 *
 	 * @param string $default  The configured model for the provider.
 	 * @param string $provider 'anthropic' | 'moonshot'.
 	 * @param array  $context  Turn context: { has_tools: bool, iteration: int }.
 	 * @return string The model to use for this request.
 	 */
 	private function resolve_model( string $default, string $provider, array $context = [] ): string {
-		$model = apply_filters( 'fahad_ai_model', $default, $provider, $context );
+		$routed = $this->fast_model_route( $default, $context );
 
-		return ( is_string( $model ) && '' !== $model ) ? $model : $default;
+		$model = apply_filters( 'fahad_ai_model', $routed, $provider, $context );
+
+		return ( is_string( $model ) && '' !== $model ) ? $model : $routed;
+	}
+
+	/**
+	 * Option-driven fast-model routing for simple turns (issue #56).
+	 *
+	 * Returns the configured fast model when routing is enabled, a non-empty fast model
+	 * is set, and the turn has no tools in play (`has_tools` false) — the cheap path for
+	 * greetings/chit-chat. Otherwise returns $default unchanged, so the capable model is
+	 * used whenever the agent is actually reasoning with tools. This is the DEFAULT that
+	 * the fahad_ai_model filter can still override.
+	 *
+	 * @param string $default The configured model for the provider.
+	 * @param array  $context Turn context: { has_tools: bool, iteration: int }.
+	 * @return string
+	 */
+	private function fast_model_route( string $default, array $context ): string {
+		if ( ! empty( $context['has_tools'] ) ) {
+			return $default;
+		}
+
+		if ( ! get_option( 'fahad_ai_fast_model_routing', false ) ) {
+			return $default;
+		}
+
+		$fast = (string) get_option( 'fahad_ai_fast_model', '' );
+
+		return '' !== $fast ? $fast : $default;
 	}
 
 	// =========================================================================

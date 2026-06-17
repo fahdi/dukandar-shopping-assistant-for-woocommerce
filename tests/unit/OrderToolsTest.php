@@ -52,6 +52,9 @@ class OrderToolsTest extends TestCase {
         Functions\stubs( [
             'absint'              => fn( $n ) => abs( (int) $n ),
             'sanitize_text_field' => fn( $s ) => is_string( $s ) ? trim( $s ) : $s,
+            // Registry get_tools() reads the merchant tool-gating option (issue #56);
+            // default (no disabled tools) so dispatch()/specs() are unaffected.
+            'get_option'          => fn( $key, $default = '' ) => $default,
             // The order tools format the WC date through wc_format_datetime( $dt,
             // 'Y-m-d' ). Our date mock is a real DateTime, so format it directly —
             // exactly the shape WooCommerce returns ('Y-m-d' here).

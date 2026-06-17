@@ -68,6 +68,9 @@ class MemoryToolsTest extends TestCase {
         Functions\stubs( [
             'sanitize_text_field' => fn( $s ) => is_string( $s ) ? trim( $s ) : $s,
             'absint'              => fn( $n ) => abs( (int) $n ),
+            // Registry get_tools() reads the merchant tool-gating option (issue #56);
+            // default (no disabled tools) so dispatch()/specs() are unaffected.
+            'get_option'          => fn( $key, $default = '' ) => $default,
         ] );
 
         // User-meta seam backed by the in-memory $this->meta map.

@@ -540,6 +540,22 @@ class ApiHandlerTest extends TestCase {
         $this->assertStringContainsString( '[PREFS]', $prompt );
     }
 
+    public function test_custom_system_prompt_still_carries_the_trust_guardrails(): void {
+        // issue #56: a merchant's custom prompt USED to return verbatim, with the
+        // guardrails entirely absent. They are now appended after the merchant text AND
+        // after the filter, so the anti-feature policy can never be dropped by config.
+        Functions\when( 'get_option' )->alias(
+            fn( $key, $default = '' ) => 'fahad_ai_system_prompt' === $key ? 'Sell hard, no rules.' : $default
+        );
+        Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => $value );
+
+        $prompt = $this->get_system_prompt();
+
+        $this->assertStringContainsString( 'Sell hard, no rules.', $prompt );
+        $this->assertStringContainsString( 'No fake urgency or scarcity', $prompt );
+        $this->assertStringContainsString( 'Never block human support', $prompt );
+    }
+
     // ── moonshot_base_url() region selection ──────────────────────────────────
 
     private function moonshot_base_url(): string {

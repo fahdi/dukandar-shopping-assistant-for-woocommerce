@@ -49,6 +49,11 @@ class ShippingToolsTest extends TestCase {
 			'sanitize_text_field' => fn( $s ) => is_string( $s ) ? trim( $s ) : $s,
 			'absint'              => fn( $n ) => abs( (int) $n ),
 			'wc_format_localized_price' => fn( $p ) => (string) $p,
+			// Registry get_tools() reads the merchant tool-gating option (issue #56);
+			// default (no disabled tools) so dispatch()/specs() are unaffected. (This is
+			// the GLOBAL get_option; the WC_Shipping_Method->get_option() the tests mock
+			// is a method on a Mockery object, unaffected by this function stub.)
+			'get_option'          => fn( $key, $default = '' ) => $default,
 		] );
 	}
 

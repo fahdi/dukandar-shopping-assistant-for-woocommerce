@@ -274,7 +274,11 @@ final class Fahad_AI_Chatbot {
 		add_options_page(
 			esc_html__( 'Fahad AI Shopping Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ),
 			esc_html__( 'Fahad AI Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ),
-			'manage_options',
+			// Shop managers (manage_woocommerce) as well as admins can tune the
+			// assistant — the natural cap for a WooCommerce extension; falls back to
+			// manage_options where the WooCommerce cap is not granted. The page
+			// callback re-checks the same capability (defence in depth).
+			fahad_ai_settings_capability(),
 			'fahad-ai-shopping-assistant-for-woocommerce',
 			'fahad_ai_settings_page'
 		);
