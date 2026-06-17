@@ -25,6 +25,16 @@ $fahad_ai_options = [
 	// Reply feedback / guardrail telemetry (issue #50). A bounded, rolling window of
 	// thumbs ratings (no PII); removed on uninstall like every other fahad_ai_ option.
 	'fahad_ai_feedback',
+	// Merchant scope / tone / business-rules config (issue #56): tone/persona,
+	// off-limits topics, per-category promo emphasis, the disabled-tools list, and the
+	// surfaced cost/model knobs (token budget + fast-model routing).
+	'fahad_ai_tone',
+	'fahad_ai_off_limits',
+	'fahad_ai_promo_emphasis',
+	'fahad_ai_disabled_tools',
+	'fahad_ai_token_budget',
+	'fahad_ai_fast_model_routing',
+	'fahad_ai_fast_model',
 ];
 
 foreach ( $fahad_ai_options as $fahad_ai_option ) {

@@ -196,7 +196,8 @@ final class Fahad_AI_Tool_Registry {
 			return $this->tools;
 		}
 
-		$tools = Fahad_AI_Tools::instance()->builtin_definitions();
+		$builtins = Fahad_AI_Tools::instance()->builtin_definitions();
+		$tools    = $builtins;
 
 		// First-party feature packs (deterministic, not via the WP filter) so they
 		// are picked up identically in production and tests.
@@ -218,9 +219,50 @@ final class Fahad_AI_Tool_Registry {
 		 */
 		$filtered = apply_filters( 'fahad_ai_register_tools', $tools );
 
-		$this->tools = $this->validate( is_array( $filtered ) ? $filtered : $tools );
+		$validated = $this->validate( is_array( $filtered ) ? $filtered : $tools );
+
+		// Merchant tool gating (issue #56): drop any tool the merchant disabled from
+		// admin, keyed by name. Applied AFTER every source is layered and validated, so
+		// it gates built-ins, packs and third-party tools uniformly WITHOUT editing any
+		// pack. The five built-in WooCommerce tools are a protected floor — they keep
+		// the assistant functional (search / cart) and the support paths intact, so they
+		// can never be disabled, even by a tampered option. builtin_definitions() is a
+		// numerically-indexed list, so pull the protected names from each entry's 'name'.
+		$builtin_names = array_values( array_filter( array_map(
+			static fn( $t ) => is_array( $t ) ? ( $t['name'] ?? null ) : null,
+			$builtins
+		) ) );
+		$this->tools = $this->apply_tool_gating( $validated, $builtin_names );
 
 		return $this->tools;
+	}
+
+	/**
+	 * Remove merchant-disabled tools from the validated map (issue #56).
+	 *
+	 * The disabled list is the `fahad_ai_disabled_tools` option (an array of tool
+	 * names, sanitized on save). Built-in tool names are never removed. Absent / empty
+	 * option ⇒ identity, so behaviour is unchanged unless a merchant opts in.
+	 *
+	 * @param array<string, array> $tools         Validated tool map (name => entry).
+	 * @param array<int, string>   $builtin_names Names that must never be gated.
+	 * @return array<string, array>
+	 */
+	private function apply_tool_gating( array $tools, array $builtin_names ): array {
+		$disabled = get_option( 'fahad_ai_disabled_tools', [] );
+		if ( ! is_array( $disabled ) || empty( $disabled ) ) {
+			return $tools;
+		}
+
+		$protected = array_flip( $builtin_names );
+
+		foreach ( $disabled as $name ) {
+			if ( is_string( $name ) && isset( $tools[ $name ] ) && ! isset( $protected[ $name ] ) ) {
+				unset( $tools[ $name ] );
+			}
+		}
+
+		return $tools;
 	}
 
 	/**

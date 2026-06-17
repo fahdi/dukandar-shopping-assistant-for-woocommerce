@@ -1,8 +1,64 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Capability required to view / save the assistant settings.
+ *
+ * `manage_woocommerce` (shop managers + admins) is the natural fit for a WooCommerce
+ * extension; falls back to `manage_options` on the rare site where the WooCommerce
+ * capability is not granted. Used by both the page guard and the admin menu.
+ */
+function fahad_ai_settings_capability(): string {
+	return current_user_can( 'manage_woocommerce' ) ? 'manage_woocommerce' : 'manage_options';
+}
+
+/**
+ * Sanitize the merchant tone/persona setting to the fixed allowlist (issue #56).
+ *
+ * The tone maps to a vetted instruction line in the system prompt, so only the known
+ * keys (Fahad_AI_API_Handler::TONES) are accepted; anything else — including any
+ * attempt to type a free-form instruction — collapses to '' (no tone line).
+ *
+ * @param mixed $raw Raw POST value.
+ * @return string A valid tone key, or ''.
+ */
+function fahad_ai_sanitize_tone( $raw ): string {
+	$key = sanitize_key( is_scalar( $raw ) ? (string) $raw : '' );
+	return isset( Fahad_AI_API_Handler::TONES[ $key ] ) ? $key : '';
+}
+
+/**
+ * Sanitize the merchant disabled-tools list (issue #56).
+ *
+ * Accepts an array of tool-name strings (e.g. from a group of checkboxes), keeps only
+ * non-empty strings, and runs each through sanitize_key so a name is a safe slug. Any
+ * non-array input yields []. The registry separately protects the built-in tools, so
+ * a tampered list can never disable the core WooCommerce tools.
+ *
+ * @param mixed $raw Raw POST value.
+ * @return array<int, string> Clean, de-duplicated tool names.
+ */
+function fahad_ai_sanitize_tool_list( $raw ): array {
+	if ( ! is_array( $raw ) ) {
+		return [];
+	}
+
+	$clean = [];
+	foreach ( $raw as $name ) {
+		if ( ! is_string( $name ) || '' === $name ) {
+			continue;
+		}
+		$slug = sanitize_key( $name );
+		if ( '' !== $slug ) {
+			$clean[ $slug ] = $slug;
+		}
+	}
+
+	return array_values( $clean );
+}
+
 function fahad_ai_settings_page(): void {
-	if ( ! current_user_can( 'manage_options' ) ) {
+	if ( ! current_user_can( fahad_ai_settings_capability() ) ) {
 		return;
 	}
 
@@ -18,6 +74,17 @@ function fahad_ai_settings_page(): void {
 		update_option( 'fahad_ai_system_prompt',     sanitize_textarea_field( wp_unslash( $_POST['system_prompt'] ?? '' ) ) );
 		update_option( 'fahad_ai_accent_color',      sanitize_hex_color( wp_unslash( $_POST['accent_color']       ?? '#2563eb' ) ) );
 
+		// Merchant scope / tone / business-rules config (issue #56).
+		update_option( 'fahad_ai_tone',           fahad_ai_sanitize_tone( wp_unslash( $_POST['tone'] ?? '' ) ) );
+		update_option( 'fahad_ai_off_limits',     sanitize_textarea_field( wp_unslash( $_POST['off_limits']      ?? '' ) ) );
+		update_option( 'fahad_ai_promo_emphasis', sanitize_textarea_field( wp_unslash( $_POST['promo_emphasis']  ?? '' ) ) );
+		update_option( 'fahad_ai_disabled_tools', fahad_ai_sanitize_tool_list( wp_unslash( $_POST['disabled_tools'] ?? [] ) ) );
+
+		// Cost / model knobs (issue #23, surfaced for #56).
+		update_option( 'fahad_ai_token_budget',        max( 0, (int) ( $_POST['token_budget'] ?? 0 ) ) );
+		update_option( 'fahad_ai_fast_model_routing',  empty( $_POST['fast_model_routing'] ) ? 0 : 1 );
+		update_option( 'fahad_ai_fast_model',          sanitize_text_field( wp_unslash( $_POST['fast_model'] ?? '' ) ) );
+
 		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'fahad-ai-shopping-assistant-for-woocommerce' ) . '</p></div>';
 	}
 
@@ -31,6 +98,28 @@ function fahad_ai_settings_page(): void {
 	$greeting        = get_option( 'fahad_ai_greeting',          'Hi! How can I help you today?' );
 	$system_prompt   = get_option( 'fahad_ai_system_prompt',     '' );
 	$accent_color    = get_option( 'fahad_ai_accent_color',      '#2563eb' );
+
+	// Merchant config (#56) + cost knobs (#23).
+	$tone               = get_option( 'fahad_ai_tone',                 '' );
+	$off_limits         = get_option( 'fahad_ai_off_limits',           '' );
+	$promo_emphasis     = get_option( 'fahad_ai_promo_emphasis',       '' );
+	$disabled_tools     = (array) get_option( 'fahad_ai_disabled_tools', [] );
+	$token_budget       = (int) get_option( 'fahad_ai_token_budget',   0 );
+	$fast_model_routing = (bool) get_option( 'fahad_ai_fast_model_routing', false );
+	$fast_model         = get_option( 'fahad_ai_fast_model',           '' );
+
+	// The five built-in WooCommerce tools are a protected floor and are never shown as
+	// disable-able. Everything else advertised to the model (packs + add-ons) can be
+	// gated. Derive the gateable list from the live registry so a new pack appears
+	// automatically with no edits here.
+	$builtin_tools  = [ 'search_products', 'get_product_details', 'add_to_cart', 'view_cart', 'remove_from_cart' ];
+	$gateable_tools = [];
+	foreach ( Fahad_AI_Tool_Registry::instance()->specs() as $spec ) {
+		if ( ! in_array( $spec['name'], $builtin_tools, true ) ) {
+			$gateable_tools[ $spec['name'] ] = $spec['description'];
+		}
+	}
+	ksort( $gateable_tools );
 	?>
 	<div class="wrap">
 		<h1><?php esc_html_e( 'Fahad AI Shopping Assistant Settings', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></h1>
@@ -179,6 +268,104 @@ function fahad_ai_settings_page(): void {
 						<textarea id="system_prompt" name="system_prompt" class="large-text" rows="7"><?php echo esc_textarea( $system_prompt ); ?></textarea>
 						<p class="description">
 							<?php esc_html_e( 'Leave blank to use the default prompt. Add store policies, shipping info, FAQs, or tone guidelines here.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+						</p>
+					</td>
+				</tr>
+			</table>
+
+			<h2 class="title"><?php esc_html_e( 'Assistant Behaviour', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></h2>
+			<p class="description" style="max-width:50em;">
+				<?php esc_html_e( 'Tune the assistant\'s tone and scope. These preferences guide the assistant, but the built-in trust safeguards (no fake urgency, respect the customer\'s budget, honest about extras, no invented facts, always allow human support) always apply and cannot be turned off.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+			</p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="tone"><?php esc_html_e( 'Tone / Persona', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
+					<td>
+						<select id="tone" name="tone">
+							<option value="" <?php selected( $tone, '' ); ?>><?php esc_html_e( 'Default (friendly, no specific persona)', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></option>
+							<option value="friendly"     <?php selected( $tone, 'friendly' );     ?>><?php esc_html_e( 'Friendly &amp; approachable', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></option>
+							<option value="professional" <?php selected( $tone, 'professional' ); ?>><?php esc_html_e( 'Professional &amp; precise', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></option>
+							<option value="concise"      <?php selected( $tone, 'concise' );      ?>><?php esc_html_e( 'Concise &amp; to the point', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></option>
+							<option value="playful"      <?php selected( $tone, 'playful' );      ?>><?php esc_html_e( 'Playful &amp; upbeat', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></option>
+							<option value="luxury"       <?php selected( $tone, 'luxury' );       ?>><?php esc_html_e( 'Premium / concierge', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></option>
+						</select>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="off_limits"><?php esc_html_e( 'Off-limits Topics', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
+					<td>
+						<textarea id="off_limits" name="off_limits" class="large-text" rows="2"><?php echo esc_textarea( $off_limits ); ?></textarea>
+						<p class="description">
+							<?php esc_html_e( 'Topics the assistant should politely decline and steer back to shopping (e.g. medical advice, competitor pricing, politics). Comma-separated or free text.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="promo_emphasis"><?php esc_html_e( 'Promotion Emphasis', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
+					<td>
+						<textarea id="promo_emphasis" name="promo_emphasis" class="large-text" rows="3"><?php echo esc_textarea( $promo_emphasis ); ?></textarea>
+						<p class="description">
+							<?php esc_html_e( 'Optional per-category emphasis, e.g. "Footwear: highlight the winter clearance." The assistant will only mention these when genuinely relevant and never as pressure.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Available Actions', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></th>
+					<td>
+						<?php if ( empty( $gateable_tools ) ) : ?>
+							<p class="description"><?php esc_html_e( 'No optional actions are installed. The core product search and cart actions are always available.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></p>
+						<?php else : ?>
+							<fieldset>
+								<legend class="screen-reader-text"><?php esc_html_e( 'Disable assistant actions', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></legend>
+								<p class="description" style="margin-bottom:8px;">
+									<?php esc_html_e( 'Untick an action to stop the assistant from using it. The core product search and cart actions cannot be disabled.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+								</p>
+								<?php foreach ( $gateable_tools as $tool_name => $tool_desc ) : ?>
+									<label style="display:block;margin-bottom:6px;">
+										<input type="checkbox" name="disabled_tools[]" value="<?php echo esc_attr( $tool_name ); ?>"
+											<?php checked( in_array( $tool_name, $disabled_tools, true ) ); ?>>
+										<code><?php echo esc_html( $tool_name ); ?></code>
+										<span class="description"> — <?php echo esc_html( $tool_desc ); ?></span>
+									</label>
+								<?php endforeach; ?>
+								<p class="description" style="margin-top:8px;">
+									<?php esc_html_e( 'Note: ticked actions are DISABLED.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+								</p>
+							</fieldset>
+						<?php endif; ?>
+					</td>
+				</tr>
+			</table>
+
+			<h2 class="title"><?php esc_html_e( 'Cost &amp; Performance', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></h2>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="token_budget"><?php esc_html_e( 'Conversation Token Budget', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
+					<td>
+						<input type="number" id="token_budget" name="token_budget" min="0" step="500"
+							value="<?php echo esc_attr( (string) $token_budget ); ?>" class="small-text">
+						<p class="description">
+							<?php esc_html_e( 'Approximate cap on the context sent to the model per turn (older history is trimmed first; the current turn is always kept). 0 = unlimited.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Fast-model Routing', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="fast_model_routing" value="1" <?php checked( $fast_model_routing ); ?>>
+							<?php esc_html_e( 'Route simple turns (e.g. greetings, with no tool use) to a cheaper, faster model.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+						</label>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="fast_model"><?php esc_html_e( 'Fast Model', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
+					<td>
+						<input type="text" id="fast_model" name="fast_model"
+							value="<?php echo esc_attr( $fast_model ); ?>" class="regular-text"
+							placeholder="claude-haiku-4-5-20251001">
+						<p class="description">
+							<?php esc_html_e( 'Model id to use for simple turns when fast-model routing is enabled (e.g. claude-haiku-4-5-20251001 or kimi-k2.6). Leave blank to keep the configured model.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
 						</p>
 					</td>
 				</tr>

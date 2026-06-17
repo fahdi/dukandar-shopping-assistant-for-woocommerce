@@ -64,6 +64,10 @@ class WalletToolsTest extends TestCase {
         // Default to a logged-in customer (id 5). Guest cases override this.
         Functions\when( 'is_user_logged_in' )->justReturn( true );
         Functions\when( 'get_current_user_id' )->justReturn( 5 );
+
+        // Registry get_tools() reads the merchant tool-gating option (issue #56);
+        // default (no disabled tools) so dispatch()/specs() are unaffected.
+        Functions\when( 'get_option' )->alias( fn( $key, $default = '' ) => $default );
     }
 
     protected function tearDown(): void {

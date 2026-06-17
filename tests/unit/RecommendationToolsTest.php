@@ -42,6 +42,9 @@ class RecommendationToolsTest extends TestCase {
         Functions\stubs( [
             'absint'              => fn( $n ) => abs( (int) $n ),
             'sanitize_text_field' => fn( $s ) => $s,
+            // Registry get_tools() reads the merchant tool-gating option (issue #56);
+            // default (no disabled tools) so dispatch()/specs() are unaffected.
+            'get_option'          => fn( $key, $default = '' ) => $default,
             'wp_json_encode'      => fn( $d ) => json_encode( $d ),
             'wc_price'            => fn( $p ) => '$' . $p,
             'wp_strip_all_tags'   => fn( $s ) => strip_tags( (string) $s ),

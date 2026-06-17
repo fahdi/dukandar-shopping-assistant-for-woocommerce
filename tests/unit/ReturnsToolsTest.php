@@ -60,6 +60,9 @@ class ReturnsToolsTest extends TestCase {
             'absint'              => fn( $n ) => abs( (int) $n ),
             'sanitize_text_field' => fn( $s ) => is_string( $s ) ? trim( $s ) : $s,
             'sanitize_textarea_field' => fn( $s ) => is_string( $s ) ? trim( $s ) : $s,
+            // Registry get_tools() reads the merchant tool-gating option (issue #56);
+            // default (no disabled tools) so dispatch()/specs() are unaffected.
+            'get_option'          => fn( $key, $default = '' ) => $default,
             'wp_strip_all_tags'   => fn( $s ) => strip_tags( (string) $s ),
             // The window math measures the order age against "now". current_time( 'timestamp', true )
             // returns a unix timestamp in WordPress; we pin it so age is deterministic.
