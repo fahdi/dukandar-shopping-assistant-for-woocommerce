@@ -588,10 +588,13 @@
 		history.push({ role: 'user', content: text });
 		setLoading(true);
 
-		// Stream for any OpenAI-compatible provider (the server localizes `streaming`);
-		// the native Anthropic path is non-streaming. Falls back to the provider check
-		// for backward compatibility if `streaming` is absent.
-		var useStreaming = (typeof cfg.streaming === 'boolean') ? cfg.streaming : (cfg.provider === 'moonshot');
+		// Stream for any OpenAI-compatible provider; the native Anthropic path is
+		// non-streaming. The server localizes `streaming` via wp_localize_script, which
+		// serialises booleans as the strings "1" / "" — so accept "1"/1/true as on, and
+		// only fall back to the legacy provider check when the flag is entirely absent.
+		var useStreaming = (cfg.streaming === undefined || cfg.streaming === null)
+			? (cfg.provider === 'moonshot')
+			: (cfg.streaming === true || cfg.streaming === '1' || cfg.streaming === 1);
 		if (useStreaming) {
 			await sendStreaming();
 		} else {
