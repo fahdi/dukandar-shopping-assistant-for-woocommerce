@@ -4,7 +4,7 @@ Tags: woocommerce, chatbot, ai, cart, assistant
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 2.0.0
+Stable tag: 2.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -97,6 +97,14 @@ The conversation history (user messages and assistant replies) and the results o
 
 == Changelog ==
 
+= 2.0.1 =
+Bug-fix release from live-store QA of 2.0.0.
+
+* Product search now understands plural and descriptive phrasing (for example "hoodies" or "medium black hoodie") instead of returning nothing and falling back to unrelated products.
+* The assistant no longer shows a raw "agent exceeded maximum iterations" error. It ends with a friendly message and keeps any product cards it already found.
+* Fixed the currency symbol rendering as garbled text in streamed replies. Streamed responses now buffer partial data frames, so the symbol renders correctly.
+* Fixed add to cart not persisting for logged-out shoppers on the streaming (Moonshot) provider. The session cookie is now set before streaming begins, so items stay in the cart.
+
 = 2.0.0 =
 A major release delivering the full shopping-assistant roadmap.
 
@@ -166,6 +174,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.0.1 =
+Fixes from live QA: smarter product search (plurals and descriptive queries), a friendly fallback instead of a raw loop error, correct currency rendering in streamed replies, and add to cart now persists for guests on the streaming provider.
 
 = 2.0.0 =
 Major update: reviews, variations, comparison, coupons, recommendations, best-sellers, order status, wallet, shipping estimates, and opt-in memory — plus trust guardrails, a privacy/auth boundary, accessibility, an extensibility hook, and cost controls. Backward compatible; no settings changes required.
