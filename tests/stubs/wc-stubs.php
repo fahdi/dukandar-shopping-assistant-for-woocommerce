@@ -84,6 +84,13 @@ if ( ! class_exists( 'WC_Product' ) ) {
         // same way the ratings getters above do.
         public function get_upsell_ids(): array           { return []; }
         public function get_cross_sell_ids(): array       { return []; }
+        // Child product ids of a grouped product (issue #57: curated bundles). A
+        // grouped product is a container whose children are the bundle items;
+        // simple/other products return an empty list. Declared so the bundle tool
+        // can read them and the eval harness's makePartial() product mock falls
+        // through to a safe empty default for fixtures that set no children, the
+        // same way the relation getters above do.
+        public function get_children(): array             { return []; }
         // Parent id of a variation (child) product; 0 for top-level products.
         // Read by add_to_cart (issue #12) to verify a chosen variation belongs to
         // the product before adding it to the cart.
