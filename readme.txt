@@ -4,7 +4,7 @@ Tags: woocommerce, chatbot, ai, cart, assistant
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 2.2.0
+Stable tag: 2.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -96,6 +96,12 @@ The conversation history (user messages and assistant replies) and the results o
 2. Admin settings — provider and API key configuration
 
 == Changelog ==
+
+= 2.3.0 =
+New shopper features.
+
+* Returns & exchanges: logged-in customers can check whether an order item is returnable (against the store's return window and the order's status) and submit a return request. The assistant only records the request for your team — it never issues a refund — and points to human support for anything ineligible.
+* Back-in-stock & price-drop alerts: shoppers can ask to be notified when an out-of-stock item returns or a price drops. Opt-in with double confirmation and one-click unsubscribe; alerts only ever fire on a real stock or price change (no fake urgency).
 
 = 2.2.0 =
 New shopper features.
@@ -192,6 +198,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.3.0 =
+Adds a returns/exchange assistant (records requests, never refunds) and consented back-in-stock / price-drop alerts. Backward compatible; no settings changes.
 
 = 2.2.0 =
 Adds reorder/buy-it-again, grounded size & fit advice, and optional "complete the look" bundles. Backward compatible; no settings changes.
