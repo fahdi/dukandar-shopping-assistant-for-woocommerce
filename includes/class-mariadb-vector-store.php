@@ -109,6 +109,7 @@ final class Fahad_AI_MariaDb_Vector_Store implements Fahad_AI_Vector_Store {
 	private function maybe_create_table(): void {
 		global $wpdb;
 		$table = $this->table();
+		// phpcs:ignore PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is $wpdb->prefix + a fixed literal, never user input.
 		$wpdb->query(
 			"CREATE TABLE IF NOT EXISTS {$table} (
 				product_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,

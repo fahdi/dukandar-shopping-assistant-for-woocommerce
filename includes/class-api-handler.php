@@ -2003,34 +2003,13 @@ Guidelines:
 	}
 
 	/**
-	 * Split streamed bytes into COMPLETE lines, returning the parsed lines plus any
-	 * trailing partial line to carry into the next call. cURL's write callback delivers
-	 * arbitrary byte boundaries (not line-aligned SSE frames), so a "data:" line — or a
-	 * multibyte character within it — can straddle two writes. Parsing a half-line would
-	 * drop or corrupt streamed text (this is what mangled the rupee currency entity, #29).
+	 * One turn for an OpenAI-compatible provider on the streaming endpoint.
 	 *
-	 * @param string $buffer Carry-over from the previous write ('' on first call).
-	 * @param string $chunk  Newly received bytes.
-	 * @return array{0: string[], 1: string} [ complete lines (no trailing newline), remaining buffer ].
-	 */
-	private function split_sse_lines( string $buffer, string $chunk ): array {
-		$buffer .= $chunk;
-		$lines   = [];
-		while ( false !== ( $pos = strpos( $buffer, "\n" ) ) ) {
-			$lines[] = substr( $buffer, 0, $pos );
-			$buffer  = substr( $buffer, $pos + 1 );
-		}
-		return [ $lines, $buffer ];
-	}
-
-	/**
-	 * Opens a single streaming curl request to an OpenAI-compatible provider.
-	 * Forwards text delta chunks to the browser immediately via SSE.
-	 * Accumulates tool_calls for the caller to execute.
-	 *
-	 * The provider's base URL / key / model are resolved from the catalog by the
-	 * $provider id, so streaming works for ANY 'openai'-type provider (Moonshot,
-	 * OpenAI, Gemini, …) over the same SSE path.
+	 * Uses the WordPress HTTP API (via call_openai → wp_remote_post) rather than a
+	 * raw cURL handle (WordPress.org guideline). The upstream model call is buffered,
+	 * then the assistant text is emitted to the client as an SSE chunk, so the
+	 * /stream endpoint's client protocol (chunk + tool + products + done) is preserved.
+	 * Works for ANY 'openai'-type provider (Moonshot, OpenAI, Gemini, …).
 	 *
 	 * @param array  $messages  OpenAI-shaped messages (system first).
 	 * @param string $provider  Catalog provider id (an 'openai'-type preset).
@@ -2038,148 +2017,35 @@ Guidelines:
 	 * @return array{0: string, 1: array, 2: string|null} [text, tool_calls, error]
 	 */
 	private function stream_one_turn( array $messages, string $provider = 'moonshot', int $iteration = 0 ): array {
-		$resolved = Fahad_AI_Providers::resolve( $provider );
-		$api_key  = $resolved['api_key'] ?? '';
-		$base_url = $resolved['base_url'] ?? '';
-		$label    = $resolved['label'] ?? $provider;
-		$tools    = $this->get_openai_tools();
+		// WordPress.org guideline: use the HTTP API, not our own cURL. The upstream
+		// model call is made through call_openai() (wp_remote_post) and buffered, then
+		// the assistant text is emitted to the client as a single SSE chunk. This keeps
+		// the streaming endpoint's client protocol (chunk + tool + products + done)
+		// intact while removing the dedicated cURL handle the reviewer flagged.
+		$response = $this->call_openai( $messages, $provider, $iteration );
 
-		// Model routing (issue #23): default unchanged; a fahad_ai_model hook may route.
-		$model = $this->resolve_model(
-			$resolved['model'] ?? '',
-			$provider,
-			[ 'has_tools' => ! empty( $tools ), 'iteration' => $iteration ]
-		);
-
-		$payload = [
-			'model'      => $model,
-			'messages'   => $messages,
-			'stream'     => true,
-			'max_tokens' => 1024,
-			'tools'      => $tools,
-		];
-
-		$collected_text  = '';
-		$raw_body        = '';   // captures full body to parse plain-JSON errors
-		$tool_buf        = [];
-		$error           = null;
-		$line_buffer     = '';   // carries a partial SSE line between writes (#29)
-
-		$write_callback = function ( $ch, $raw ) use ( &$collected_text, &$tool_buf, &$error, &$raw_body, &$line_buffer, $label ) {
-			$raw_body .= $raw;
-
-			// cURL delivers arbitrary byte chunks, not line-aligned SSE frames. Parse
-			// only COMPLETE lines and keep any trailing partial frame for the next write.
-			[ $lines, $line_buffer ] = $this->split_sse_lines( $line_buffer, $raw );
-			foreach ( $lines as $line ) {
-				$line = trim( $line );
-				if ( ! str_starts_with( $line, 'data: ' ) ) {
-					continue;
-				}
-
-				$json = substr( $line, 6 );
-				if ( $json === '[DONE]' ) {
-					continue;
-				}
-
-				$chunk = json_decode( $json, true );
-				if ( ! is_array( $chunk ) ) {
-					continue;
-				}
-
-				// Error embedded inside the SSE stream.
-				if ( isset( $chunk['error'] ) ) {
-					$error = $chunk['error']['message'] ?? sprintf(
-						/* translators: %s: provider label, e.g. "OpenAI" */
-						__( '%s API error.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
-						$label
-					);
-					return strlen( $raw );
-				}
-
-				$delta = $chunk['choices'][0]['delta'] ?? [];
-
-				// ── Text chunk ──
-				if ( ! empty( $delta['content'] ) ) {
-					$collected_text .= $delta['content'];
-					$this->sse_send( 'chunk', [ 'content' => $delta['content'] ] );
-				}
-
-				// ── Tool call fragments (may arrive across multiple chunks) ──
-				foreach ( $delta['tool_calls'] ?? [] as $tc ) {
-					$idx = $tc['index'] ?? 0;
-					if ( ! isset( $tool_buf[ $idx ] ) ) {
-						$tool_buf[ $idx ] = [ 'id' => '', 'name' => '', 'arguments' => '' ];
-					}
-					if ( ! empty( $tc['id'] ) )                    $tool_buf[ $idx ]['id']        = $tc['id'];
-					if ( ! empty( $tc['function']['name'] ) )      $tool_buf[ $idx ]['name']      = $tc['function']['name'];
-					if ( ! empty( $tc['function']['arguments'] ) ) $tool_buf[ $idx ]['arguments'] .= $tc['function']['arguments'];
-				}
-			}
-
-			return strlen( $raw );
-		};
-
-		/*
-		 * SSE streaming needs the response body delivered to us incrementally.
-		 * wp_remote_post() buffers the whole body, and overriding the cURL write
-		 * callback through the http_api_curl hook is not honoured reliably across
-		 * PHP/cURL builds (the WordPress transport sets its own write handler, so
-		 * the upstream bytes can leak straight to output and corrupt the SSE
-		 * framing). A dedicated cURL handle gives us a deterministic write
-		 * callback, which is required for real streaming.
-		 */
-		if ( ! function_exists( 'curl_init' ) ) {
-			return [ '', [], __( 'Live streaming requires the PHP cURL extension.', 'fahad-ai-shopping-assistant-for-woocommerce' ) ];
+		if ( is_wp_error( $response ) ) {
+			return [ '', [], $response->get_error_message() ];
 		}
 
-		// phpcs:disable WordPress.WP.AlternativeFunctions.curl_curl_init, WordPress.WP.AlternativeFunctions.curl_curl_setopt, WordPress.WP.AlternativeFunctions.curl_curl_exec, WordPress.WP.AlternativeFunctions.curl_curl_errno, WordPress.WP.AlternativeFunctions.curl_curl_error, WordPress.WP.AlternativeFunctions.curl_curl_getinfo, WordPress.WP.AlternativeFunctions.curl_curl_close
-		$ch = curl_init();
-		curl_setopt( $ch, CURLOPT_URL, $this->openai_chat_url( $base_url ) );
-		curl_setopt( $ch, CURLOPT_POST, true );
-		curl_setopt( $ch, CURLOPT_POSTFIELDS, wp_json_encode( $payload ) );
-		curl_setopt( $ch, CURLOPT_HTTPHEADER, [
-			'Authorization: Bearer ' . $api_key,
-			'Content-Type: application/json',
-			'Accept: text/event-stream',
-		] );
-		curl_setopt( $ch, CURLOPT_TIMEOUT, 60 );
-		curl_setopt( $ch, CURLOPT_RETURNTRANSFER, false );
-		curl_setopt( $ch, CURLOPT_WRITEFUNCTION, $write_callback );
-		curl_exec( $ch );
-		$curl_errno = curl_errno( $ch );
-		$curl_error = curl_error( $ch );
-		$http_code  = (int) curl_getinfo( $ch, CURLINFO_HTTP_CODE );
-		curl_close( $ch );
-		// phpcs:enable
+		$message = $response['choices'][0]['message'] ?? [];
+		$text    = (string) ( $message['content'] ?? '' );
 
-		// Transport-level failure (DNS, TLS, timeout) with no SSE error parsed.
-		if ( ! $error && $curl_errno ) {
-			$error = $curl_error !== '' ? $curl_error : __( 'Live streaming connection failed.', 'fahad-ai-shopping-assistant-for-woocommerce' );
-		}
-
-		// Non-200 with no SSE error parsed → plain JSON error body (e.g. 401 auth failures).
-		if ( ! $error && 200 !== $http_code ) {
-			$body  = json_decode( $raw_body, true );
-			$error = $body['error']['message'] ?? sprintf(
-				/* translators: 1: provider label, 2: HTTP status code */
-				__( '%1$s API error (HTTP %2$d).', 'fahad-ai-shopping-assistant-for-woocommerce' ),
-				$label,
-				$http_code
-			);
-		}
-
-		// Parse accumulated tool call argument JSON strings.
 		$tool_calls = [];
-		foreach ( $tool_buf as $tc ) {
+		foreach ( $message['tool_calls'] ?? [] as $call ) {
 			$tool_calls[] = [
-				'id'    => $tc['id'],
-				'name'  => $tc['name'],
-				'input' => json_decode( $tc['arguments'], true ) ?? [],
+				'id'    => $call['id'] ?? '',
+				'name'  => $call['function']['name'] ?? '',
+				'input' => json_decode( $call['function']['arguments'] ?? '', true ) ?? [],
 			];
 		}
 
-		return [ $collected_text, $tool_calls, $error ];
+		// Surface the assistant text (buffered) so the widget renders it.
+		if ( '' !== $text ) {
+			$this->sse_send( 'chunk', [ 'content' => $text ] );
+		}
+
+		return [ $text, $tool_calls, null ];
 	}
 
 	/**

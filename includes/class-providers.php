@@ -231,6 +231,7 @@ final class Fahad_AI_Providers {
 		 *
 		 * @param array<string, array<string, mixed>> $catalog The provider catalog.
 		 */
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- self::FILTER is the prefixed constant 'fahad_ai_providers'.
 		$catalog = apply_filters( self::FILTER, self::presets() );
 
 		if ( ! is_array( $catalog ) ) {

@@ -62,39 +62,39 @@ class ApiHandlerTest extends TestCase {
         return Fahad_AI_API_Handler::instance();
     }
 
-    // ── SSE line buffering (live-QA finding #29) ────────────────────────────────
-    // cURL's write callback delivers arbitrary byte chunks, not line-aligned SSE
-    // frames. Parsing a half-received "data:" line drops/corrupts streamed text
-    // (this is what mangled the rupee currency entity). split_sse_lines() must
-    // return only COMPLETE lines and buffer the trailing partial for the next write.
+    // ── stream_one_turn uses the WordPress HTTP API, not raw cURL (WP.org guideline) ──
+    // The streaming endpoint buffers the upstream model call via call_openai()
+    // (wp_remote_post) and emits the assistant text to the client as an SSE chunk.
+    // Reaching the stubbed wp_remote_post (rather than a live cURL handle) proves the
+    // raw-cURL transport was removed.
 
-    public function test_split_sse_lines_reassembles_frame_split_across_writes(): void {
-        $m = new ReflectionMethod( Fahad_AI_API_Handler::class, 'split_sse_lines' );
-        $h = $this->handler();
+    public function test_stream_one_turn_uses_http_api_and_parses_message(): void {
+        $this->set_option_alias( [ 'fahad_ai_moonshot_api_key' => 'k', 'fahad_ai_moonshot_model' => 'kimi-k2.6' ] );
+        Functions\when( 'apply_filters' )->alias( static fn( $tag, $value = null ) => $value );
+        Functions\when( 'wp_json_encode' )->alias( static fn( $d ) => json_encode( $d ) );
+        Functions\when( 'wp_remote_post' )->justReturn( [ 'is_eval' => true ] );
+        Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+        Functions\when( 'wp_remote_retrieve_body' )->justReturn(
+            json_encode( [
+                'choices' => [ [
+                    'finish_reason' => 'tool_calls',
+                    'message'       => [
+                        'content'    => 'Here are some hoodies',
+                        'tool_calls' => [ [ 'id' => 't1', 'function' => [ 'name' => 'search_products', 'arguments' => '{"query":"hoodie"}' ] ] ],
+                    ],
+                ] ],
+            ] )
+        );
 
-        // First write ends mid-frame: only the first line is complete.
-        [ $lines, $buffer ] = $m->invoke( $h, '', "data: {\"a\":1}\ndata: {\"b\":" );
-        $this->assertSame( [ 'data: {"a":1}' ], $lines );
-        $this->assertSame( 'data: {"b":', $buffer );
+        $m = new ReflectionMethod( Fahad_AI_API_Handler::class, 'stream_one_turn' );
+        ob_start();
+        [ $text, $tool_calls, $error ] = $m->invoke( $this->handler(), [ [ 'role' => 'user', 'content' => 'hi' ] ], 'moonshot', 0 );
+        ob_end_clean();
 
-        // Second write completes the buffered frame.
-        [ $lines2, $buffer2 ] = $m->invoke( $h, $buffer, "2}\n" );
-        $this->assertSame( [ 'data: {"b":2}' ], $lines2 );
-        $this->assertSame( '', $buffer2 );
-    }
-
-    public function test_split_sse_lines_preserves_multibyte_split_across_writes(): void {
-        $m = new ReflectionMethod( Fahad_AI_API_Handler::class, 'split_sse_lines' );
-        $h = $this->handler();
-
-        // The rupee sign (U+20A8) is three UTF-8 bytes; split it across two writes.
-        $rupee = "\xE2\x82\xA8";
-
-        [ $lines, $buffer ] = $m->invoke( $h, '', 'data: {"c":"' . substr( $rupee, 0, 1 ) );
-        $this->assertSame( [], $lines, 'No complete line yet — partial frame must be buffered.' );
-
-        [ $lines2 ] = $m->invoke( $h, $buffer, substr( $rupee, 1 ) . "\"}\n" );
-        $this->assertSame( [ 'data: {"c":"' . $rupee . '"}' ], $lines2 );
+        $this->assertNull( $error );
+        $this->assertSame( 'Here are some hoodies', $text, 'reached wp_remote_post (HTTP API), not a live cURL call' );
+        $this->assertSame( 'search_products', $tool_calls[0]['name'] );
+        $this->assertSame( [ 'query' => 'hoodie' ], $tool_calls[0]['input'] );
     }
 
     // ── per-turn product-card de-duplication (bug #97) ──────────────────────────
