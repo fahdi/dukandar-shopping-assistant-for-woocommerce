@@ -4,7 +4,7 @@ Tags: woocommerce, chatbot, ai, cart, assistant
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 2.11.0
+Stable tag: 2.11.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -90,7 +90,7 @@ API keys are stored in the WordPress options table using standard WordPress secu
 
 = Does it support streaming responses? =
 
-Yes — streaming is available with the Moonshot AI (Kimi) provider. Responses appear word-by-word as they are generated. The Anthropic provider uses standard request/response.
+The Moonshot AI (Kimi) provider uses a streaming endpoint; the Anthropic provider uses standard request/response. Either way the reply is delivered to the chat widget as soon as it is ready.
 
 = What data is sent to the AI provider? =
 
@@ -102,6 +102,13 @@ The conversation history (user messages and assistant replies) and the results o
 2. Admin settings — provider and API key configuration
 
 == Changelog ==
+
+= 2.11.1 =
+WordPress.org review fixes + standards compliance.
+
+* Replaced the direct cURL call in the streaming path with the WordPress HTTP API (per the plugin guidelines).
+* Hardened all admin form input handling (unslash + sanitize) and resolved Plugin Check / PHPCS findings.
+* Confirmed WordPress 7.0 and PHP 8.0-8.4 compatibility.
 
 = 2.11.0 =
 Semantic search scale tiers (opt-in).
@@ -263,6 +270,9 @@ Under the hood:
 
 == Upgrade Notice ==
 
+= 2.11.1 =
+Maintenance release: WordPress.org guideline compliance (HTTP API, input sanitization) and WP 7.0 confirmation. No functional changes.
+
 = 2.11.0 =
 Adds optional scale tiers for semantic search (MariaDB native vectors, external Qdrant) and a reranking hook. All opt-in; no change for typical stores.
 
@@ -306,7 +316,7 @@ Maintenance release: documentation and internal planning only — no functional 
 Fixes from live QA: smarter product search (plurals and descriptive queries), a friendly fallback instead of a raw loop error, correct currency rendering in streamed replies, and add to cart now persists for guests on the streaming provider.
 
 = 2.0.0 =
-Major update: reviews, variations, comparison, coupons, recommendations, best-sellers, order status, wallet, shipping estimates, and opt-in memory — plus trust guardrails, a privacy/auth boundary, accessibility, an extensibility hook, and cost controls. Backward compatible; no settings changes required.
+Major update: reviews, variations, comparison, coupons, recommendations, order status, wallet, shipping, and opt-in memory, plus trust guardrails, a privacy/auth boundary, accessibility, and cost controls. Backward compatible; no settings changes needed.
 
 = 1.1.0 =
 Product results now appear as rich cards with photo, price, stock, and Add-to-cart buttons.

@@ -104,8 +104,8 @@ function fahad_ai_sanitize_tool_list( $raw ): array {
  * @return array{ from: ?int, to: ?int, from_str: string, to_str: string }
  */
 function fahad_ai_analytics_range_from_request(): array {
-	$from_str = isset( $_GET['from'] ) ? sanitize_text_field( wp_unslash( $_GET['from'] ) ) : '';
-	$to_str   = isset( $_GET['to'] ) ? sanitize_text_field( wp_unslash( $_GET['to'] ) ) : '';
+	$from_str = isset( $_GET['from'] ) ? sanitize_text_field( wp_unslash( $_GET['from'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only date-range filter, no state change.
+	$to_str   = isset( $_GET['to'] ) ? sanitize_text_field( wp_unslash( $_GET['to'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only date-range filter, no state change.
 
 	$from = fahad_ai_analytics_parse_date( $from_str, false );
 	$to   = fahad_ai_analytics_parse_date( $to_str, true );
@@ -428,7 +428,7 @@ function fahad_ai_settings_page(): void {
 	if ( isset( $_POST['fahad_ai_save'] ) && check_admin_referer( 'fahad_ai_settings' ) ) {
 		// Selected provider: only a known catalog id is accepted (an unknown value
 		// falls back to anthropic), so a tampered select can't set a bogus provider.
-		update_option( 'fahad_ai_provider', fahad_ai_sanitize_provider( wp_unslash( $_POST['provider'] ?? 'anthropic' ) ) );
+		update_option( 'fahad_ai_provider', fahad_ai_sanitize_provider( sanitize_text_field( wp_unslash( $_POST['provider'] ?? 'anthropic' ) ) ) );
 
 		// Per-provider API key + model, driven by the catalog (issue: multi-provider).
 		// Each provider's form fields are {id}_api_key / {id}_model and persist to its
@@ -446,37 +446,37 @@ function fahad_ai_settings_page(): void {
 		}
 
 		// Moonshot region (global vs. china — separate platforms/keys/catalogues).
-		update_option( 'fahad_ai_moonshot_region', 'china' === ( $_POST['moonshot_region'] ?? 'global' ) ? 'china' : 'global' );
+		update_option( 'fahad_ai_moonshot_region', 'china' === sanitize_text_field( wp_unslash( $_POST['moonshot_region'] ?? 'global' ) ) ? 'china' : 'global' );
 
 		// Custom provider base URL — validated to https (or a localhost http) and
 		// otherwise dropped to '' (Fahad_AI_Providers::sanitize_base_url). Never trusted
 		// as a raw string: it becomes part of the outbound request target.
-		update_option( 'fahad_ai_custom_base_url', Fahad_AI_Providers::sanitize_base_url( (string) wp_unslash( $_POST['custom_base_url'] ?? '' ) ) );
+		update_option( 'fahad_ai_custom_base_url', Fahad_AI_Providers::sanitize_base_url( sanitize_text_field( wp_unslash( $_POST['custom_base_url'] ?? '' ) ) ) );
 		update_option( 'fahad_ai_bot_name',          sanitize_text_field( wp_unslash( $_POST['bot_name']          ?? 'Store Assistant' ) ) );
 		update_option( 'fahad_ai_greeting',          sanitize_textarea_field( wp_unslash( $_POST['greeting']      ?? 'Hi! How can I help you today?' ) ) );
 		update_option( 'fahad_ai_system_prompt',     sanitize_textarea_field( wp_unslash( $_POST['system_prompt'] ?? '' ) ) );
 		update_option( 'fahad_ai_accent_color',      sanitize_hex_color( wp_unslash( $_POST['accent_color']       ?? '#2563eb' ) ) );
 
 		// Merchant scope / tone / business-rules config (issue #56).
-		update_option( 'fahad_ai_tone',           fahad_ai_sanitize_tone( wp_unslash( $_POST['tone'] ?? '' ) ) );
+		update_option( 'fahad_ai_tone',           fahad_ai_sanitize_tone( sanitize_text_field( wp_unslash( $_POST['tone'] ?? '' ) ) ) );
 		update_option( 'fahad_ai_off_limits',     sanitize_textarea_field( wp_unslash( $_POST['off_limits']      ?? '' ) ) );
 		update_option( 'fahad_ai_promo_emphasis', sanitize_textarea_field( wp_unslash( $_POST['promo_emphasis']  ?? '' ) ) );
-		update_option( 'fahad_ai_disabled_tools', fahad_ai_sanitize_tool_list( wp_unslash( $_POST['disabled_tools'] ?? [] ) ) );
+		update_option( 'fahad_ai_disabled_tools', fahad_ai_sanitize_tool_list( array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['disabled_tools'] ?? [] ) ) ) );
 
 		// Multilingual: default/allowed languages (issue #61). Default 'auto' = detect and
 		// match the shopper's language across the supported set (English / Urdu / Roman
 		// Urdu); a specific list (e.g. "English, Urdu") pins the preferred set.
-		update_option( 'fahad_ai_languages', fahad_ai_sanitize_languages( wp_unslash( $_POST['languages'] ?? 'auto' ) ) );
+		update_option( 'fahad_ai_languages', fahad_ai_sanitize_languages( sanitize_text_field( wp_unslash( $_POST['languages'] ?? 'auto' ) ) ) );
 
 		// Cost / model knobs (issue #23, surfaced for #56).
-		update_option( 'fahad_ai_token_budget',        max( 0, (int) ( $_POST['token_budget'] ?? 0 ) ) );
+		update_option( 'fahad_ai_token_budget',        absint( $_POST['token_budget'] ?? 0 ) );
 		update_option( 'fahad_ai_fast_model_routing',  empty( $_POST['fast_model_routing'] ) ? 0 : 1 );
 		update_option( 'fahad_ai_fast_model',          sanitize_text_field( wp_unslash( $_POST['fast_model'] ?? '' ) ) );
 
 		// Proactive, value-gated nudge (issue #65). Default OFF (opt-in); the frequency
 		// cap is floored at 0 (0 = effectively off, never nudge).
 		update_option( 'fahad_ai_proactive_enabled',   empty( $_POST['proactive_enabled'] ) ? 0 : 1 );
-		update_option( 'fahad_ai_proactive_frequency', max( 0, (int) ( $_POST['proactive_frequency'] ?? Fahad_AI_Proactive::DEFAULT_FREQUENCY ) ) );
+		update_option( 'fahad_ai_proactive_frequency', absint( $_POST['proactive_frequency'] ?? Fahad_AI_Proactive::DEFAULT_FREQUENCY ) );
 
 		// Voice input/output (issue #64). Both default OFF (opt-in): the master switch
 		// gates whether the widget builds the mic/speaker controls at all, and the TTS
