@@ -41,6 +41,9 @@ final class Fahad_AI_Retriever {
 	 * @return mixed Ranked product IDs, or $ids to fall back to keyword search.
 	 */
 	public static function resolve_seam( $ids, string $query, array $filters ) {
+		if ( ! Fahad_AI_Embeddings::enabled() ) {
+			return $ids; // semantic search is opt-in — keyword search runs until switched on
+		}
 		$provider = Fahad_AI_Embeddings::provider();
 		if ( ! $provider || ! $provider->is_available() ) {
 			return $ids;

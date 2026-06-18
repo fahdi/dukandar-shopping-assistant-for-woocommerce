@@ -409,6 +409,22 @@ function fahad_ai_settings_page(): void {
 		return;
 	}
 
+	// One-shot notice after the "Build index" action (#108) round-trips via admin-post.php.
+	// Read-only display flag after a nonce-verified redirect; value is cast to int.
+	$fahad_ai_indexed = isset( $_GET['fahad_ai_indexed'] ) ? (int) $_GET['fahad_ai_indexed'] : -1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	if ( $fahad_ai_indexed >= 0 ) {
+		printf(
+			'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
+			esc_html(
+				sprintf(
+					/* translators: %d: number of products queued for embedding */
+					__( 'Search index build queued for %d products. It runs in the background.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+					$fahad_ai_indexed
+				)
+			)
+		);
+	}
+
 	if ( isset( $_POST['fahad_ai_save'] ) && check_admin_referer( 'fahad_ai_settings' ) ) {
 		// Selected provider: only a known catalog id is accepted (an unknown value
 		// falls back to anthropic), so a tampered select can't set a bogus provider.
@@ -476,6 +492,9 @@ function fahad_ai_settings_page(): void {
 		update_option( 'fahad_ai_whatsapp_enabled',      empty( $_POST['whatsapp_enabled'] ) ? 0 : 1 );
 		update_option( 'fahad_ai_whatsapp_verify_token', sanitize_text_field( wp_unslash( $_POST['whatsapp_verify_token'] ?? '' ) ) );
 		update_option( 'fahad_ai_whatsapp_app_secret',   sanitize_text_field( wp_unslash( $_POST['whatsapp_app_secret'] ?? '' ) ) );
+
+		// Semantic search settings (#108). Sanitization lives in the admin class.
+		Fahad_AI_Embeddings_Admin::save( wp_unslash( $_POST ) );
 
 		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'fahad-ai-shopping-assistant-for-woocommerce' ) . '</p></div>';
 	}
@@ -955,6 +974,8 @@ function fahad_ai_settings_page(): void {
 					</td>
 				</tr>
 			</table>
+
+			<?php Fahad_AI_Embeddings_Admin::render_settings(); ?>
 
 			<?php submit_button( esc_html__( 'Save Settings', 'fahad-ai-shopping-assistant-for-woocommerce' ), 'primary', 'fahad_ai_save' ); ?>
 		</form>

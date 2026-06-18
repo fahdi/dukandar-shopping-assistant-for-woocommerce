@@ -4,7 +4,7 @@ Tags: woocommerce, chatbot, ai, cart, assistant
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 2.8.1
+Stable tag: 2.9.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -58,6 +58,8 @@ This plugin sends conversation data only to the single AI provider you select in
 
 Only conversation history and product data relevant to the current session are transmitted, and only to the provider you selected. No personal customer data is sent unless the customer types it into the chat.
 
+If you enable **Semantic Search** (off by default), product text — titles, descriptions and attributes, never prices, stock, or customer data — is sent to OpenAI (`api.openai.com`) to build a vector index when you build the index or a product changes. [OpenAI privacy policy](https://openai.com/policies/privacy-policy/).
+
 == Installation ==
 
 1. Upload the `fahad-ai-shopping-assistant-for-woocommerce` folder to `/wp-content/plugins/`
@@ -100,6 +102,13 @@ The conversation history (user messages and assistant replies) and the results o
 2. Admin settings — provider and API key configuration
 
 == Changelog ==
+
+= 2.9.0 =
+Semantic search (beta) — find products by meaning, not just keywords.
+
+* New **Semantic Search** setting: when enabled with an OpenAI key, product search becomes hybrid — it combines the existing keyword search with AI vector search and fuses the results, so "something warm for winter" finds the fleece even without the exact words.
+* Off by default and fully backward compatible: search stays keyword-only until you switch it on, and always falls back to keyword search if the index is unavailable.
+* Build the index from Settings with one click; it updates automatically as products change, skips unchanged products, and respects a per-day cap to control cost. Only product text is sent to OpenAI — never prices, stock, or customer data.
 
 = 2.8.1 =
 * Fixed a bug where a product could be shown as a duplicate card within a single reply when the assistant referenced it from more than one action in the same turn (e.g. a search followed by a details lookup). Each product now appears at most once per reply.
@@ -241,6 +250,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.9.0 =
+Adds optional semantic (AI vector) product search, off by default. Enable it in Settings with an OpenAI key to let shoppers find products by meaning; search is unchanged until you do.
 
 = 2.8.1 =
 Fixes a bug where the same product card could appear twice in one reply when the assistant looked a product up more than once in a single turn.
