@@ -67,8 +67,7 @@ final class Fahad_AI_Retriever {
 	public function search( string $query, array $filters = [], int $k = 10 ): array {
 		$k = max( 1, $k );
 
-		$vectors = $this->provider->embed( [ $query ] );
-		$query_vector = $vectors[0] ?? [];
+		$query_vector = $this->embed_query( $query );
 		if ( ! $query_vector ) {
 			return [];
 		}
@@ -82,6 +81,28 @@ final class Fahad_AI_Retriever {
 		$keyword_ids = $this->keyword_ids( $query, $filters, $k * 3 );
 
 		return array_slice( Fahad_AI_Rrf::fuse( [ $keyword_ids, $vector_ids ] ), 0, $k );
+	}
+
+	/**
+	 * Embed the query, caching the vector briefly so repeated identical shopper
+	 * phrases are not re-embedded (cost control, #109). Cache key is namespaced by
+	 * model + dimensions so a model change never returns a stale-shape vector.
+	 *
+	 * @return array<int, float>
+	 */
+	private function embed_query( string $query ): array {
+		$key    = 'fahad_ai_qe_' . md5( $query . '|' . $this->provider->model() . '|' . $this->provider->dimensions() );
+		$cached = get_transient( $key );
+		if ( is_array( $cached ) && $cached ) {
+			return $cached;
+		}
+
+		$vectors = $this->provider->embed( [ $query ] );
+		$vector  = $vectors[0] ?? [];
+		if ( $vector ) {
+			set_transient( $key, $vector, 300 ); // 5 min — long enough to coalesce a burst of identical queries
+		}
+		return $vector;
 	}
 
 	/** Product IDs matching the live filters (category/price/stock) — the vector scan set. */

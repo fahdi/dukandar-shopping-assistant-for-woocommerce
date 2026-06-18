@@ -25,7 +25,8 @@ final class Fahad_AI_Embeddings {
 			? new Fahad_AI_OpenAI_Embedding_Provider(
 				$key,
 				(string) get_option( 'fahad_ai_embedding_model', 'text-embedding-3-small' ),
-				(int) get_option( 'fahad_ai_embedding_dims', 512 )
+				(int) get_option( 'fahad_ai_embedding_dims', 512 ),
+				200 // retry backoff base (ms); transient failures retry with jitter
 			)
 			: null;
 
