@@ -1,0 +1,74 @@
+<?xml version="1.0"?>
+<ruleset name="Fahad AI Shopping Assistant">
+	<description>WordPress Coding Standards + PHP cross-version compatibility for the plugin.</description>
+
+	<!-- What to scan: plugin PHP only. -->
+	<file>.</file>
+	<arg name="extensions" value="php"/>
+	<arg name="basepath" value="."/>
+	<arg name="colors"/>
+	<arg name="parallel" value="8"/>
+	<arg value="ps"/><!-- progress + show sniff codes -->
+
+	<!-- Not plugin source: deps, tests, JS, build output. -->
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/tests/*</exclude-pattern>
+	<exclude-pattern>*/assets/js/*</exclude-pattern>
+
+	<!-- ===== WordPress Coding Standards ===== -->
+	<rule ref="WordPress">
+		<!--
+			The codebase deliberately documents with narrative inline comments rather
+			than formal PHPDoc blocks on every function/file/var. Exclude the doc-block
+			sniffs so the gate flags substantive issues (security, correctness, naming,
+			i18n, escaping, SQL, spacing) instead of drowning in comment-style noise.
+		-->
+		<exclude name="Squiz.Commenting"/>
+		<exclude name="Generic.Commenting"/>
+		<!-- Statement alignment is a stylistic choice, not a correctness concern. -->
+		<exclude name="Generic.Formatting.MultipleStatementAlignment"/>
+	</rule>
+
+	<!-- Project identity so naming / i18n sniffs don't false-positive. -->
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="fahad_ai"/>
+				<element value="FAHAD_AI"/>
+				<element value="Fahad_AI"/>
+			</property>
+		</properties>
+	</rule>
+
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="fahad-ai-shopping-assistant-for-woocommerce"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!--
+		Teach the input-validation sniff about the plugin's custom sanitizers, so
+		input run through them is not reported as raw. These mirror core sanitizers
+		(allowlist / cast / sanitize_text_field) and are the real sanitization point.
+	-->
+	<rule ref="WordPress.Security.ValidatedSanitizedInput">
+		<properties>
+			<property name="customSanitizingFunctions" type="array">
+				<element value="fahad_ai_sanitize_provider"/>
+				<element value="fahad_ai_sanitize_tone"/>
+				<element value="fahad_ai_sanitize_languages"/>
+				<element value="fahad_ai_sanitize_tool_list"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!-- Minimum supported versions (mirrors plugin headers). -->
+	<config name="minimum_wp_version" value="6.0"/>
+
+	<!-- ===== PHP cross-version compatibility (Requires PHP: 8.0) ===== -->
+	<config name="testVersion" value="8.0-"/>
+	<rule ref="PHPCompatibilityWP"/>
+</ruleset>
