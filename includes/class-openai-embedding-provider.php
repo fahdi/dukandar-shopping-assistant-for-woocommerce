@@ -15,10 +15,18 @@ final class Fahad_AI_OpenAI_Embedding_Provider implements Fahad_AI_Embedding_Pro
 
 	private const ENDPOINT = 'https://api.openai.com/v1/embeddings';
 
+	/** Extra attempts after the first on a transient failure (429/5xx/transport). */
+	private const MAX_RETRIES = 2;
+
+	/**
+	 * @param int $retry_base_ms Base backoff in ms (exponential + jitter). 0 disables
+	 *                           the sleep (used in tests so retries don't block).
+	 */
 	public function __construct(
 		private string $key,
 		private string $model = 'text-embedding-3-small',
-		private int $dimensions = 512
+		private int $dimensions = 512,
+		private int $retry_base_ms = 0
 	) {}
 
 	public function model(): string {
@@ -42,6 +50,23 @@ final class Fahad_AI_OpenAI_Embedding_Provider implements Fahad_AI_Embedding_Pro
 			throw new Fahad_AI_Embedding_Exception( 'No embeddings API key configured.', false );
 		}
 
+		// Retry transient failures (429/5xx/transport) with exponential backoff + jitter;
+		// terminal errors (4xx/malformed) fail fast (RAG-DESIGN.md §5.6).
+		$attempt = 0;
+		while ( true ) {
+			try {
+				return $this->request( $texts );
+			} catch ( Fahad_AI_Embedding_Exception $e ) {
+				if ( ! $e->is_retryable() || $attempt >= self::MAX_RETRIES ) {
+					throw $e;
+				}
+				$this->backoff( ++$attempt );
+			}
+		}
+	}
+
+	/** A single embeddings request; throws Fahad_AI_Embedding_Exception on any failure. */
+	private function request( array $texts ): array {
 		$response = wp_remote_post(
 			self::ENDPOINT,
 			[
@@ -84,5 +109,15 @@ final class Fahad_AI_OpenAI_Embedding_Provider implements Fahad_AI_Embedding_Pro
 			static fn( $row ) => array_map( 'floatval', (array) ( $row['embedding'] ?? [] ) ),
 			$data['data']
 		);
+	}
+
+	/** Exponential backoff with jitter before retry $attempt (no-op when base is 0). */
+	private function backoff( int $attempt ): void {
+		if ( $this->retry_base_ms <= 0 ) {
+			return;
+		}
+		$delay  = $this->retry_base_ms * ( 2 ** ( $attempt - 1 ) );
+		$jitter = function_exists( 'wp_rand' ) ? wp_rand( 0, $this->retry_base_ms ) : 0;
+		usleep( ( $delay + $jitter ) * 1000 );
 	}
 }
