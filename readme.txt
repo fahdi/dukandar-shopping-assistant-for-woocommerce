@@ -4,7 +4,7 @@ Tags: woocommerce, chatbot, ai, cart, assistant
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 2.10.0
+Stable tag: 2.11.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -58,7 +58,7 @@ This plugin sends conversation data only to the single AI provider you select in
 
 Only conversation history and product data relevant to the current session are transmitted, and only to the provider you selected. No personal customer data is sent unless the customer types it into the chat.
 
-If you enable **Semantic Search** (off by default), product text — titles, descriptions and attributes, never prices, stock, or customer data — is sent to the embeddings provider you choose to build a vector index when you build the index or a product changes. The provider is configurable: OpenAI (`api.openai.com`, default), Cohere (`api.cohere.com`, stronger for non-Latin scripts), or any OpenAI-compatible endpoint you point it at (e.g. Moonshot, Together, or a self-hosted server) using that endpoint's key. Review the chosen provider's privacy policy before enabling. [OpenAI](https://openai.com/policies/privacy-policy/) · [Cohere](https://cohere.com/privacy).
+If you enable **Semantic Search** (off by default), product text — titles, descriptions and attributes, never prices, stock, or customer data — is sent to the embeddings provider you choose to build a vector index when you build the index or a product changes. The provider is configurable: OpenAI (`api.openai.com`, default), Cohere (`api.cohere.com`, stronger for non-Latin scripts), or any OpenAI-compatible endpoint you point it at (e.g. Moonshot, Together, or a self-hosted server) using that endpoint's key. Review the chosen provider's privacy policy before enabling. [OpenAI](https://openai.com/policies/privacy-policy/) · [Cohere](https://cohere.com/privacy). If you additionally configure an external **Qdrant** vector store (advanced, optional), the resulting vectors and product IDs are stored on the Qdrant server you specify — no product text or customer data is sent there.
 
 == Installation ==
 
@@ -102,6 +102,12 @@ The conversation history (user messages and assistant replies) and the results o
 2. Admin settings — provider and API key configuration
 
 == Changelog ==
+
+= 2.11.0 =
+Semantic search scale tiers (opt-in).
+
+* **Larger catalogs, faster search.** On MariaDB 11.7+ the index automatically uses the database's native vector search; for very large catalogs you can point the index at an external **Qdrant** server. Both are optional and auto-detected — typical stores keep using the built-in store with no change.
+* Optional reranking hook for fine-tuning result order. No action needed; semantic search stays off until you enable it.
 
 = 2.10.0 =
 Semantic search hardening + provider flexibility.
@@ -256,6 +262,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.11.0 =
+Adds optional scale tiers for semantic search (MariaDB native vectors, external Qdrant) and a reranking hook. All opt-in; no change for typical stores.
 
 = 2.10.0 =
 Semantic search now works with Cohere or any OpenAI-compatible endpoint (not just OpenAI), plus retry/caching and index-health reporting. No action needed; semantic search stays off until you enable it.

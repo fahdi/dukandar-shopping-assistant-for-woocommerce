@@ -3,7 +3,7 @@
  * Plugin Name: Fahad AI Shopping Assistant for WooCommerce
  * Plugin URI:  https://github.com/fahdi/fahad-ai-shopping-assistant-for-woocommerce
  * Description: AI-powered shopping assistant for WooCommerce — answers questions and manages the cart using OpenAI, Claude, Gemini, Moonshot, and other major AI providers.
- * Version:     2.10.0
+ * Version:     2.11.0
  * Author:      Fahdi Murtaza
  * Author URI:  https://github.com/fahdi
  * License:     GPL v2 or later
@@ -19,7 +19,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FAHAD_AI_VERSION', '2.10.0' );
+define( 'FAHAD_AI_VERSION', '2.11.0' );
 define( 'FAHAD_AI_PATH', plugin_dir_path( __FILE__ ) );
 define( 'FAHAD_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -34,6 +34,7 @@ require_once FAHAD_AI_PATH . 'includes/class-embeddings.php';
 require_once FAHAD_AI_PATH . 'includes/interface-vector-store.php';
 require_once FAHAD_AI_PATH . 'includes/class-postmeta-vector-store.php';
 require_once FAHAD_AI_PATH . 'includes/class-mariadb-vector-store.php';
+require_once FAHAD_AI_PATH . 'includes/class-qdrant-vector-store.php';
 require_once FAHAD_AI_PATH . 'includes/class-vector-stores.php';
 require_once FAHAD_AI_PATH . 'includes/class-index-health.php';
 require_once FAHAD_AI_PATH . 'includes/class-indexer.php';
@@ -494,4 +495,7 @@ add_action( 'plugins_loaded', function () {
 
 	// Semantic-search admin: settings save/render + the build-index action.
 	Fahad_AI_Embeddings_Admin::register();
+
+	// Opt-in external vector backend (Qdrant) — no-op unless a URL is configured.
+	Fahad_AI_Qdrant_Vector_Store::register();
 } );

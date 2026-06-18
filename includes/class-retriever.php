@@ -79,8 +79,20 @@ final class Fahad_AI_Retriever {
 		}
 
 		$keyword_ids = $this->keyword_ids( $query, $filters, $k * 3 );
+		$fused       = Fahad_AI_Rrf::fuse( [ $keyword_ids, $vector_ids ] );
 
-		return array_slice( Fahad_AI_Rrf::fuse( [ $keyword_ids, $vector_ids ] ), 0, $k );
+		/**
+		 * Optional cross-encoder rerank seam (#113). Off by default — a Cohere/Voyage
+		 * reranker can register here to reorder the fused candidates for extra
+		 * precision; with nothing registered the fused order passes through unchanged.
+		 *
+		 * @param array<int,int> $fused   Fused candidate ids, best first.
+		 * @param string         $query   The shopper's query.
+		 * @param array          $filters Structured constraints.
+		 */
+		$fused = (array) apply_filters( 'fahad_ai_rerank', $fused, $query, $filters );
+
+		return array_slice( $fused, 0, $k );
 	}
 
 	/**
