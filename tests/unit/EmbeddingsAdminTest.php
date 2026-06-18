@@ -70,6 +70,13 @@ class EmbeddingsAdminTest extends TestCase {
 		$this->assertSame( 'co-key', $this->options[ Fahad_AI_Embeddings_Admin::OPT_COHERE_KEY ] );
 	}
 
+	public function test_save_persists_qdrant_settings_with_collection_default(): void {
+		Fahad_AI_Embeddings_Admin::save( [ 'qdrant_url' => 'https://q.example.com:6333', 'qdrant_key' => 'qk' ] );
+		$this->assertSame( 'https://q.example.com:6333', $this->options['fahad_ai_qdrant_url'] );
+		$this->assertSame( 'qk', $this->options['fahad_ai_qdrant_key'] );
+		$this->assertSame( 'fahad_ai_products', $this->options['fahad_ai_qdrant_collection'], 'blank collection -> default' );
+	}
+
 	public function test_save_rejects_unknown_provider_type_and_defaults_base_url(): void {
 		Fahad_AI_Embeddings_Admin::save( [ 'embedding_provider_type' => 'bogus' ] );
 		$this->assertSame( 'openai', $this->options[ Fahad_AI_Embeddings_Admin::OPT_PROVIDER_TYPE ] );

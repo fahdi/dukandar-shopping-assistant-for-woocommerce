@@ -24,6 +24,7 @@ class CostControlsTest extends TestCase {
 		Functions\when( 'wp_json_encode' )->alias( static fn( $d ) => json_encode( $d ) );
 		Functions\when( 'esc_html' )->alias( static fn( $s ) => $s );
 		Functions\when( 'wp_rand' )->alias( static fn( $a = 0, $b = 0 ) => $a ); // deterministic jitter
+		Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => $value ); // rerank seam passthrough
 	}
 
 	protected function tearDown(): void {

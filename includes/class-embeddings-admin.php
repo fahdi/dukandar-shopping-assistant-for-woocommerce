@@ -53,6 +53,12 @@ final class Fahad_AI_Embeddings_Admin {
 
 		update_option( self::OPT_API_KEY, sanitize_text_field( (string) ( $post['embedding_api_key'] ?? '' ) ) );
 		update_option( self::OPT_COHERE_KEY, sanitize_text_field( (string) ( $post['cohere_api_key'] ?? '' ) ) );
+
+		// External vector backend (Qdrant, #113) — opt-in scale tier.
+		update_option( 'fahad_ai_qdrant_url', sanitize_text_field( (string) ( $post['qdrant_url'] ?? '' ) ) );
+		update_option( 'fahad_ai_qdrant_key', sanitize_text_field( (string) ( $post['qdrant_key'] ?? '' ) ) );
+		$collection = sanitize_text_field( (string) ( $post['qdrant_collection'] ?? '' ) );
+		update_option( 'fahad_ai_qdrant_collection', '' !== $collection ? $collection : 'fahad_ai_products' );
 	}
 
 	/**
@@ -146,6 +152,9 @@ final class Fahad_AI_Embeddings_Admin {
 		$base_url   = (string) get_option( self::OPT_BASE_URL, 'https://api.openai.com/v1' );
 		$api_key    = (string) get_option( self::OPT_API_KEY, '' );
 		$cohere_key = (string) get_option( self::OPT_COHERE_KEY, '' );
+		$qdrant_url = (string) get_option( 'fahad_ai_qdrant_url', '' );
+		$qdrant_key = (string) get_option( 'fahad_ai_qdrant_key', '' );
+		$qdrant_col = (string) get_option( 'fahad_ai_qdrant_collection', 'fahad_ai_products' );
 		$build_url  = admin_url( 'admin-post.php' );
 		?>
 		<h2 class="title"><?php esc_html_e( 'Semantic Search (beta)', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></h2>
@@ -193,6 +202,15 @@ final class Fahad_AI_Embeddings_Admin {
 			<tr>
 				<th scope="row"><label for="embedding_model"><?php esc_html_e( 'Embedding Model', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
 				<td><input type="text" id="embedding_model" name="embedding_model" value="<?php echo esc_attr( $model ); ?>" class="regular-text" placeholder="text-embedding-3-small"></td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'External vector store', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></th>
+				<td>
+					<p class="description" style="margin-bottom:8px;"><?php esc_html_e( 'Advanced / very large catalogs only. Leave blank to use the built-in store (MySQL/MariaDB). When a Qdrant URL is set, the index is stored and searched there instead.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></p>
+					<input type="text" name="qdrant_url" value="<?php echo esc_attr( $qdrant_url ); ?>" class="regular-text" placeholder="https://your-qdrant-host:6333" style="margin-bottom:4px;"><br>
+					<input type="password" name="qdrant_key" value="<?php echo esc_attr( $qdrant_key ); ?>" class="regular-text" autocomplete="new-password" placeholder="<?php esc_attr_e( 'Qdrant API key', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>" style="margin-bottom:4px;"><br>
+					<input type="text" name="qdrant_collection" value="<?php echo esc_attr( $qdrant_col ); ?>" class="regular-text" placeholder="fahad_ai_products">
+				</td>
 			</tr>
 			<tr>
 				<th scope="row"><label for="embedding_dims"><?php esc_html_e( 'Dimensions', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>

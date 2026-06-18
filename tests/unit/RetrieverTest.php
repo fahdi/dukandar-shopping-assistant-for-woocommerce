@@ -25,6 +25,8 @@ class RetrieverTest extends TestCase {
 		// Query-embedding cache (#109): default to a miss so these tests exercise the real embed path.
 		Functions\when( 'get_transient' )->justReturn( false );
 		Functions\when( 'set_transient' )->justReturn( true );
+		// Rerank seam (#113): no reranker registered -> passthrough.
+		Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => $value );
 	}
 
 	protected function tearDown(): void {

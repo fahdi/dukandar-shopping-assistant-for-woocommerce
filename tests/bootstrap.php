@@ -18,6 +18,7 @@ require_once dirname( __DIR__ ) . '/includes/class-embeddings.php';
 require_once dirname( __DIR__ ) . '/includes/interface-vector-store.php';
 require_once dirname( __DIR__ ) . '/includes/class-postmeta-vector-store.php';
 require_once dirname( __DIR__ ) . '/includes/class-mariadb-vector-store.php';
+require_once dirname( __DIR__ ) . '/includes/class-qdrant-vector-store.php';
 require_once dirname( __DIR__ ) . '/includes/class-vector-stores.php';
 require_once dirname( __DIR__ ) . '/includes/class-index-health.php';
 require_once dirname( __DIR__ ) . '/includes/class-indexer.php';
