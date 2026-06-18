@@ -3,7 +3,7 @@
  * Plugin Name: Fahad AI Shopping Assistant for WooCommerce
  * Plugin URI:  https://github.com/fahdi/fahad-ai-shopping-assistant-for-woocommerce
  * Description: AI-powered shopping assistant for WooCommerce — answers questions and manages the cart using OpenAI, Claude, Gemini, Moonshot, and other major AI providers.
- * Version:     2.8.1
+ * Version:     2.9.0
  * Author:      Fahdi Murtaza
  * Author URI:  https://github.com/fahdi
  * License:     GPL v2 or later
@@ -19,7 +19,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FAHAD_AI_VERSION', '2.8.1' );
+define( 'FAHAD_AI_VERSION', '2.9.0' );
 define( 'FAHAD_AI_PATH', plugin_dir_path( __FILE__ ) );
 define( 'FAHAD_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -34,6 +34,7 @@ require_once FAHAD_AI_PATH . 'includes/interface-vector-store.php';
 require_once FAHAD_AI_PATH . 'includes/class-postmeta-vector-store.php';
 require_once FAHAD_AI_PATH . 'includes/class-indexer.php';
 require_once FAHAD_AI_PATH . 'includes/class-retriever.php';
+require_once FAHAD_AI_PATH . 'includes/class-embeddings-admin.php';
 require_once FAHAD_AI_PATH . 'includes/class-rrf.php';
 require_once FAHAD_AI_PATH . 'includes/class-embedding-document.php';
 require_once FAHAD_AI_PATH . 'includes/class-relevance-metrics.php';
@@ -486,4 +487,7 @@ add_action( 'plugins_loaded', function () {
 	// Make product search hybrid (keyword + vector) via the semantic-search seam.
 	// No-op without an embeddings provider — search stays keyword-only.
 	Fahad_AI_Retriever::register();
+
+	// Semantic-search admin: settings save/render + the build-index action.
+	Fahad_AI_Embeddings_Admin::register();
 } );

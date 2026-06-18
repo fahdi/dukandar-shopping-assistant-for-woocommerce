@@ -124,6 +124,9 @@ final class Fahad_AI_Indexer {
 
 	/** Action Scheduler handler: embed one product (no-op without a provider). */
 	public static function handle_embed_action( $product_id ): void {
+		if ( ! Fahad_AI_Embeddings::enabled() ) {
+			return; // semantic search off — don't embed
+		}
 		$provider = Fahad_AI_Embeddings::provider();
 		if ( ! $provider || ! $provider->is_available() ) {
 			return;
