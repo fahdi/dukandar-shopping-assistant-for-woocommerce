@@ -83,7 +83,7 @@
 	root.innerHTML = `
 		<button id="chatbot-toggle" type="button" aria-expanded="false" aria-controls="chatbot-panel"
 			aria-label="${esc(i18n.openChat || 'Open chat assistant')}">
-			<svg width="45" height="45" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+			<svg xmlns="http://www.w3.org/2000/svg" width="45" height="45" style="width:45px;height:45px;display:block;flex-shrink:0" viewBox="0 0 24 24" fill="#ffffff" aria-hidden="true" focusable="false">
 				<path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
 			</svg>
 		</button>
