@@ -39,6 +39,7 @@ final class Fahad_AI_Tools {
 						'category'  => [ 'type' => 'string',  'description' => 'Category slug or name' ],
 						'min_price' => [ 'type' => 'number',  'description' => 'Minimum price' ],
 						'max_price' => [ 'type' => 'number',  'description' => 'Maximum price' ],
+						'on_sale'   => [ 'type' => 'boolean', 'description' => 'When true, return ONLY products that are currently on sale (a reduced price). Use this whenever the customer asks what is on sale, about deals, discounts, or clearance — it composes with category and price.' ],
 						'limit'     => [ 'type' => 'integer', 'description' => 'Max results (default 5, max 10)' ],
 					],
 				],
@@ -113,9 +114,16 @@ final class Fahad_AI_Tools {
 	// -------------------------------------------------------------------------
 
 	private function search_products( array $input ): array {
+		// On-sale browse (issue #137): a grounded filter so the assistant can answer
+		// "what is on sale" from real data instead of guessing. Fetch wider when filtering
+		// by sale so the post-filter has enough candidates (sale items may sit beyond the
+		// first few by relevance), then cap to the display limit below.
+		$only_sale = ! empty( $input['on_sale'] );
+		$limit     = min( (int) ( $input['limit'] ?? 5 ), 10 );
+
 		$base = [
 			'status'  => 'publish',
-			'limit'   => min( (int) ( $input['limit'] ?? 5 ), 10 ),
+			'limit'   => $only_sale ? 50 : $limit,
 			'orderby' => 'relevance',
 		];
 
@@ -143,7 +151,11 @@ final class Fahad_AI_Tools {
 		// the keyword leg is always the safety net (graceful degradation). A pure
 		// category/price browse (empty query) has no intent to embed, so it skips
 		// the seam entirely. See docs/RAG-DESIGN.md §4.3 / §5.4.
-		if ( '' !== $query ) {
+		// Skip the semantic seam for an on-sale browse: "on sale" is a structured catalog
+		// filter, not an intent to embed, and the semantic summaries are ranked by meaning,
+		// not sale status — so we always resolve sale queries through the deterministic
+		// keyword/catalog path below and filter on the live WC_Product::is_on_sale().
+		if ( '' !== $query && ! $only_sale ) {
 			$semantic = Fahad_AI_Semantic_Search::retrieve( $query, $this->semantic_filters( $base ) );
 			if ( ! empty( $semantic ) ) {
 				return [
@@ -169,11 +181,29 @@ final class Fahad_AI_Tools {
 			}
 		}
 
+		// On-sale filter (issue #137): keep only products WooCommerce reports as on sale,
+		// then cap to the display limit. Applied after all query resolution so the cards
+		// always match an "on sale" claim and the count is honest.
+		if ( $only_sale ) {
+			$products = array_slice(
+				array_values(
+					array_filter(
+						$products,
+						static fn( $p ) => $p instanceof WC_Product && $p->is_on_sale()
+					)
+				),
+				0,
+				$limit
+			);
+		}
+
 		if ( empty( $products ) ) {
 			return [
 				'found'    => 0,
 				'products' => [],
-				'message'  => __( 'No products found matching your search.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+				'message'  => $only_sale
+					? __( 'No products are currently on sale.', 'fahad-ai-shopping-assistant-for-woocommerce' )
+					: __( 'No products found matching your search.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
 			];
 		}
 

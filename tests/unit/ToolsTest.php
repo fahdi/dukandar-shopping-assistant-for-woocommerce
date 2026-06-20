@@ -168,6 +168,75 @@ class ToolsTest extends TestCase {
         }
     }
 
+    // ── on-sale filter (issue #137) ─────────────────────────────────────────────
+    // A grounded "what is on sale" needs a real filter, so the assistant can never
+    // claim sale status from memory and the cards always match the claim.
+
+    private function mockSaleProduct( int $id, string $name, string $regular, string $sale ): WC_Product {
+        $p = Mockery::mock( WC_Product::class );
+        $p->shouldReceive( 'get_id' )->andReturn( $id );
+        $p->shouldReceive( 'get_name' )->andReturn( $name );
+        $p->shouldReceive( 'get_price' )->andReturn( $sale );
+        $p->shouldReceive( 'get_regular_price' )->andReturn( $regular );
+        $p->shouldReceive( 'get_sale_price' )->andReturn( $sale );
+        $p->shouldReceive( 'is_on_sale' )->andReturn( true );
+        $p->shouldReceive( 'is_visible' )->andReturn( true )->byDefault();
+        $p->shouldReceive( 'is_in_stock' )->andReturn( true )->byDefault();
+        $p->shouldReceive( 'get_type' )->andReturn( 'simple' );
+        $p->shouldReceive( 'is_type' )->with( 'variable' )->andReturn( false );
+        $p->shouldReceive( 'get_description' )->andReturn( '' );
+        $p->shouldReceive( 'get_short_description' )->andReturn( '' );
+        $p->shouldReceive( 'get_sku' )->andReturn( '' );
+        $p->shouldReceive( 'get_stock_quantity' )->andReturn( 10 );
+        $p->shouldReceive( 'get_image_id' )->andReturn( 0 );
+        $p->shouldReceive( 'get_average_rating' )->andReturn( '4.5' )->byDefault();
+        $p->shouldReceive( 'get_review_count' )->andReturn( 8 )->byDefault();
+        return $p;
+    }
+
+    public function test_search_products_schema_exposes_on_sale_param(): void {
+        $defs = $this->tools()->builtin_definitions();
+        $search = null;
+        foreach ( $defs as $d ) {
+            if ( 'search_products' === ( $d['name'] ?? '' ) ) { $search = $d; break; }
+        }
+        $this->assertNotNull( $search, 'search_products tool must exist' );
+        $props = $search['parameters']['properties'] ?? [];
+        $this->assertArrayHasKey( 'on_sale', $props, 'search_products must expose an on_sale param' );
+        $this->assertSame( 'boolean', $props['on_sale']['type'] ?? null );
+    }
+
+    public function test_search_on_sale_returns_only_discounted_products(): void {
+        $sale   = $this->mockSaleProduct( 1, 'Discounted Mug', '49.99', '34.99' );
+        $normal = $this->mockProduct( 2, 'Full Price Tee', '34.99' );
+        Functions\when( 'wc_get_products' )->justReturn( [ $sale, $normal ] );
+
+        $result = $this->tools()->execute( 'search_products', [ 'on_sale' => true ] );
+
+        $this->assertSame( 1, $result['found'], 'Only the on-sale product must be returned.' );
+        $this->assertSame( 1, $result['products'][0]['id'] );
+        $this->assertTrue( $result['products'][0]['on_sale'] );
+    }
+
+    public function test_search_on_sale_with_none_returns_zero_and_a_sale_message(): void {
+        Functions\when( 'wc_get_products' )->justReturn( [ $this->mockProduct( 9, 'Full Price', '20.00' ) ] );
+
+        $result = $this->tools()->execute( 'search_products', [ 'on_sale' => true ] );
+
+        $this->assertSame( 0, $result['found'] );
+        $this->assertStringContainsStringIgnoringCase( 'on sale', (string) ( $result['message'] ?? '' ) );
+    }
+
+    public function test_search_without_on_sale_does_not_filter(): void {
+        $sale   = $this->mockSaleProduct( 1, 'Discounted Mug', '49.99', '34.99' );
+        $normal = $this->mockProduct( 2, 'Full Price Tee', '34.99' );
+        Functions\when( 'wc_get_products' )->justReturn( [ $sale, $normal ] );
+
+        $result = $this->tools()->execute( 'search_products', [ 'query' => 'mug' ] );
+
+        $this->assertSame( 2, $result['found'], 'Without on_sale the filter must not apply.' );
+    }
+
     // ── get_product_details ───────────────────────────────────────────────────
 
     public function test_get_product_details_returns_full_data(): void {

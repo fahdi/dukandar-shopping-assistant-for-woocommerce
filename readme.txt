@@ -103,6 +103,13 @@ The conversation history (user messages and assistant replies) and the results o
 
 == Changelog ==
 
+= 2.11.9 =
+Grounded sale and discount answers.
+
+* The assistant can now filter a product search to items that are currently on sale, so "what is on sale?" returns the real sale products with their sale prices instead of a generic list.
+* It no longer claims an item is or is not on sale from memory. It checks the catalog first, and if nothing is discounted it says so plainly.
+* Reached 100% automated test coverage across the plugin (PHP and the chat widget) with enforced coverage gates.
+
 = 2.11.8 =
 Mobile UI fixes, humanized replies, and a new frontend test suite.
 
