@@ -549,12 +549,16 @@
   if(!window.matchMedia('(min-width: 881px)').matches)return;
   var link=document.querySelector('.mock-link');if(!link)return;
   var el=link.querySelector('.mock');if(!el)return;
+  var cta=link.querySelector('.mock-cta');
   var tick=false;
   function upd(){
     tick=false;
     var r=link.getBoundingClientRect(),vh=window.innerHeight||document.documentElement.clientHeight;  // parent is untransformed -> no feedback
     var p=(r.top+r.height/2-vh/2)/vh;            // ~ +0.5 (mock low) .. -0.5 (mock high)
-    el.style.translate='0 '+(-(p*120)).toFixed(1)+'px';   // gentle lag, up to ~60px
+    p=Math.max(-0.5,Math.min(0.5,p));            // clamp so the drift can't float over the band below
+    var s='0 '+(-(p*180)).toFixed(1)+'px';       // lag, up to ~90px
+    el.style.translate=s;                         // card and its "See it live" badge parallax together
+    if(cta)cta.style.translate=s;
   }
   window.addEventListener('scroll',function(){if(!tick){tick=true;requestAnimationFrame(upd);}},{passive:true});
   window.addEventListener('resize',upd);
