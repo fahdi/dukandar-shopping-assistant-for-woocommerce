@@ -278,6 +278,20 @@ class ApiHandlerTest extends TestCase {
         $this->assertStringContainsString( 'concise but complete', $prompt );
     }
 
+    // ── grounded sale/deal answers (#137) ───────────────────────────────────────
+    // The model must NEVER claim sale status from memory; sale questions are answered
+    // by querying search_products with on_sale:true, so the cards match the claim.
+
+    public function test_system_prompt_grounds_sale_questions_in_a_tool_call(): void {
+        Functions\when( 'apply_filters' )->alias( static fn( $tag, $value = null ) => $value );
+
+        $prompt = ( new ReflectionMethod( Fahad_AI_API_Handler::class, 'get_system_prompt' ) )
+            ->invoke( $this->handler() );
+
+        $this->assertStringContainsString( 'on_sale', $prompt );
+        $this->assertStringContainsStringIgnoringCase( 'never', $prompt );
+    }
+
     public function test_currency_normalizer_repairs_hex_malformed_entity(): void {
         // The hex spelling of the same malformed value (&#x344;) must be repaired too —
         // the guard keys off the resulting codepoint, not the decimal/hex notation.
