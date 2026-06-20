@@ -130,9 +130,7 @@
   @keyframes bubIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   .bub.user.typing-now::after{content:"";display:inline-block;width:2px;height:1.05em;margin-left:2px;vertical-align:-0.16em;background:var(--paper);animation:caret .85s steps(1,end) infinite}
   @keyframes caret{50%{opacity:0}}
-  /* subtle parallax: the mock drifts as it scrolls through the viewport (desktop, supported browsers) */
-  @keyframes mockPar{from{translate:0 60px}to{translate:0 -60px}}
-  @media(min-width:881px){@supports (animation-timeline:view()){.mock-link .mock{animation:mockPar linear both;animation-timeline:view();animation-range:cover}}}
+  /* subtle parallax on the hero mock is driven in JS (cross-browser) near </body> */
 
   /* hero */
   .hero{padding:84px 0 64px;position:relative}
@@ -545,6 +543,22 @@
   var started=false;
   var io=new IntersectionObserver(function(es){if(es[0].isIntersecting&&!started){started=true;play();}},{threshold:0.35});
   io.observe(mock);
+})();</script>
+<script>(function(){
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  if(!window.matchMedia('(min-width: 881px)').matches)return;
+  var link=document.querySelector('.mock-link');if(!link)return;
+  var el=link.querySelector('.mock');if(!el)return;
+  var tick=false;
+  function upd(){
+    tick=false;
+    var r=link.getBoundingClientRect(),vh=window.innerHeight||document.documentElement.clientHeight;  // parent is untransformed -> no feedback
+    var p=(r.top+r.height/2-vh/2)/vh;            // ~ +0.5 (mock low) .. -0.5 (mock high)
+    el.style.translate='0 '+(-(p*120)).toFixed(1)+'px';   // gentle lag, up to ~60px
+  }
+  window.addEventListener('scroll',function(){if(!tick){tick=true;requestAnimationFrame(upd);}},{passive:true});
+  window.addEventListener('resize',upd);
+  upd();
 })();</script>
 </body>
 </html>
