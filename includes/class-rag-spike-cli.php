@@ -38,14 +38,16 @@ final class Fahad_AI_Rag_Spike_CLI {
 	 * : Catalog sizes for the latency projection. Default 1000,5000,20000.
 	 *
 	 * [--report=<path>]
-	 * : Where to write the markdown report. Default docs/RAG-SPIKE-REPORT.md.
+	 * : Where to write the markdown report. Default: RAG-SPIKE-REPORT.md inside the WordPress uploads folder.
 	 *
 	 * @when after_wp_load
 	 */
 	public function __invoke( array $args, array $assoc ): void {
 		$k     = max( 1, (int) ( $assoc['k'] ?? 3 ) );
 		$sizes = array_values( array_filter( array_map( 'intval', explode( ',', (string) ( $assoc['sizes'] ?? '1000,5000,20000' ) ) ) ) );
-		$path  = (string) ( $assoc['report'] ?? ( FAHAD_AI_PATH . 'docs/RAG-SPIKE-REPORT.md' ) );
+		$upload  = wp_upload_dir();
+		$default = trailingslashit( $upload['basedir'] ) . 'fahad-ai-shopping-assistant-for-woocommerce/RAG-SPIKE-REPORT.md';
+		$path    = (string) ( $assoc['report'] ?? $default );
 
 		[ $texts, $vecs, $queries, $mode ] = $this->build_dataset();
 
@@ -65,7 +67,8 @@ final class Fahad_AI_Rag_Spike_CLI {
 		}
 
 		$report = $this->render_report( $cmp, $latency, $k, $mode );
-		// Spike CLI writing a local dev report; WP_Filesystem is unnecessary ceremony here.
+		wp_mkdir_p( dirname( $path ) );
+		// WP-CLI dev tool; WP_Filesystem overhead is unnecessary for a one-shot local report write.
 		if ( false !== file_put_contents( $path, $report ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 			\WP_CLI::success( "Report written to {$path}" );
 		} else {

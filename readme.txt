@@ -4,7 +4,7 @@ Tags: woocommerce, chatbot, ai, cart, assistant
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 2.11.1
+Stable tag: 2.14.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -47,18 +47,7 @@ Fahad AI Shopping Assistant adds an intelligent shopping assistant widget to you
 
 **External services:**
 
-This plugin sends conversation data only to the single AI provider you select in Settings and configure with an API key. Every provider is opt-in; nothing is sent until you choose and configure one.
-
-* Anthropic Messages API (`api.anthropic.com`). [Privacy policy](https://www.anthropic.com/legal/privacy).
-* Moonshot AI (`api.moonshot.ai` / `api.moonshot.cn`). [Privacy policy](https://www.moonshot.ai/privacy).
-* OpenAI (`api.openai.com`). [Privacy policy](https://openai.com/policies/privacy-policy/).
-* Google Gemini (`generativelanguage.googleapis.com`). [Privacy policy](https://policies.google.com/privacy).
-* Groq (`api.groq.com`), Mistral (`api.mistral.ai`), DeepSeek (`api.deepseek.com`), xAI (`api.x.ai`), Together AI (`api.together.xyz`), OpenRouter (`openrouter.ai`), Perplexity (`api.perplexity.ai`) — each used only when you select it; review that provider's own privacy policy before enabling it.
-* A custom OpenAI-compatible endpoint you enter yourself, or a local model served via Ollama (`localhost`, no data leaves your server).
-
-Only conversation history and product data relevant to the current session are transmitted, and only to the provider you selected. No personal customer data is sent unless the customer types it into the chat.
-
-If you enable **Semantic Search** (off by default), product text — titles, descriptions and attributes, never prices, stock, or customer data — is sent to the embeddings provider you choose to build a vector index when you build the index or a product changes. The provider is configurable: OpenAI (`api.openai.com`, default), Cohere (`api.cohere.com`, stronger for non-Latin scripts), or any OpenAI-compatible endpoint you point it at (e.g. Moonshot, Together, or a self-hosted server) using that endpoint's key. Review the chosen provider's privacy policy before enabling. [OpenAI](https://openai.com/policies/privacy-policy/) · [Cohere](https://cohere.com/privacy). If you additionally configure an external **Qdrant** vector store (advanced, optional), the resulting vectors and product IDs are stored on the Qdrant server you specify — no product text or customer data is sent there.
+This plugin sends data only to the AI provider you configure with an API key. Every provider is opt-in; nothing is sent until you choose and configure one. See the [External services](#section-external-services) section below for full details, including links to each provider's terms of service and privacy policy.
 
 == Installation ==
 
@@ -101,7 +90,127 @@ The conversation history (user messages and assistant replies) and the results o
 1. Chat widget on the storefront
 2. Admin settings — provider and API key configuration
 
+== External services ==
+
+This plugin connects to external AI APIs to generate chat responses and (optionally) product embeddings. Every provider is opt-in — no data leaves your server until you choose a provider and enter an API key in Settings.
+
+**What data is sent:** the shopper's messages, the assistant's prior replies (conversation history), and the results of tool calls (product titles, descriptions, cart contents, order status for the logged-in customer). No raw customer account data is sent unless the shopper types it into the chat.
+
+**When data is sent:** only when a shopper submits a message to the chat widget, or (for semantic search) when the store owner triggers an embedding build or a product is saved.
+
+---
+
+= Anthropic (Claude) =
+
+Used to generate chat responses when Anthropic is selected as the provider.
+
+* **Endpoint:** `api.anthropic.com`
+* **Data sent:** conversation history and tool-call results per session.
+* [Terms of Service](https://www.anthropic.com/legal/consumer-terms) | [Privacy Policy](https://www.anthropic.com/legal/privacy)
+
+= Moonshot AI (Kimi) =
+
+Used to generate chat responses (including streaming) when Moonshot AI is selected.
+
+* **Endpoint:** `api.moonshot.ai` / `api.moonshot.cn`
+* **Data sent:** conversation history and tool-call results per session.
+* [Terms of Service](https://platform.moonshot.ai/docs/tos) | [Privacy Policy](https://www.moonshot.ai/privacy)
+
+= OpenAI =
+
+Used to generate chat responses when OpenAI is selected, and as the default provider for semantic-search embeddings when that feature is enabled.
+
+* **Endpoint:** `api.openai.com`
+* **Data sent (chat):** conversation history and tool-call results per session. **Data sent (embeddings, optional):** product titles, descriptions, and attributes — never prices, stock levels, or customer data.
+* [Terms of Service](https://openai.com/policies/terms-of-use/) | [Privacy Policy](https://openai.com/policies/privacy-policy/)
+
+= Google Gemini =
+
+Used to generate chat responses when Google Gemini is selected as the provider.
+
+* **Endpoint:** `generativelanguage.googleapis.com`
+* **Data sent:** conversation history and tool-call results per session.
+* [Terms of Service](https://ai.google.dev/terms) | [Privacy Policy](https://policies.google.com/privacy)
+
+= Groq =
+
+Used to generate chat responses when Groq is selected as the provider.
+
+* **Endpoint:** `api.groq.com`
+* **Data sent:** conversation history and tool-call results per session.
+* [Terms of Service](https://groq.com/terms-of-service/) | [Privacy Policy](https://groq.com/privacy-policy/)
+
+= Mistral AI =
+
+Used to generate chat responses when Mistral is selected as the provider.
+
+* **Endpoint:** `api.mistral.ai`
+* **Data sent:** conversation history and tool-call results per session.
+* [Terms of Service](https://mistral.ai/terms/) | [Privacy Policy](https://mistral.ai/privacy-policy/)
+
+= DeepSeek =
+
+Used to generate chat responses when DeepSeek is selected as the provider.
+
+* **Endpoint:** `api.deepseek.com`
+* **Data sent:** conversation history and tool-call results per session.
+* [Terms of Service](https://www.deepseek.com/terms) | [Privacy Policy](https://www.deepseek.com/privacy)
+
+= xAI (Grok) =
+
+Used to generate chat responses when xAI is selected as the provider.
+
+* **Endpoint:** `api.x.ai`
+* **Data sent:** conversation history and tool-call results per session.
+* [Terms of Service](https://x.ai/legal/terms-of-service) | [Privacy Policy](https://x.ai/legal/privacy-policy)
+
+= Together AI =
+
+Used to generate chat responses when Together AI is selected as the provider.
+
+* **Endpoint:** `api.together.xyz`
+* **Data sent:** conversation history and tool-call results per session.
+* [Terms of Service](https://www.together.ai/terms) | [Privacy Policy](https://www.together.ai/privacy)
+
+= OpenRouter =
+
+Used to route chat requests to various underlying models when OpenRouter is selected as the provider.
+
+* **Endpoint:** `openrouter.ai`
+* **Data sent:** conversation history and tool-call results per session.
+* [Terms of Service](https://openrouter.ai/terms) | [Privacy Policy](https://openrouter.ai/privacy)
+
+= Perplexity =
+
+Used to generate chat responses when Perplexity is selected as the provider.
+
+* **Endpoint:** `api.perplexity.ai`
+* **Data sent:** conversation history and tool-call results per session.
+* [Terms of Service](https://www.perplexity.ai/hub/legal/terms-of-service) | [Privacy Policy](https://www.perplexity.ai/hub/legal/privacy-policy)
+
+= Cohere =
+
+Used for semantic-search embeddings (optional feature, off by default) when Cohere is selected as the embeddings provider. Only product text is sent — never prices, stock levels, or customer data.
+
+* **Endpoint:** `api.cohere.com`
+* **Data sent:** product titles, descriptions, and attributes when the store owner builds or rebuilds the search index.
+* [Terms of Service](https://cohere.com/terms-of-use) | [Privacy Policy](https://cohere.com/privacy)
+
+= Meta (WhatsApp Business Cloud API) =
+
+Used when the optional WhatsApp channel is enabled (off by default). The plugin receives inbound messages from Meta's webhook and sends replies back through the Cloud API. Enable this only if you have a Meta Business account and have configured the WhatsApp integration in Settings.
+
+* **Endpoint:** `graph.facebook.com`
+* **Data sent:** the assistant's reply text and the shopper's WhatsApp sender ID. Inbound messages arrive via Meta's webhook — no shopper data is proactively sent from your server to Meta beyond what is required to deliver a reply.
+* [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
+
 == Changelog ==
+
+= 2.14.1 =
+WordPress.org compliance: external services documentation and plugin-folder write fix.
+
+* Added standalone `== External services ==` readme section listing every AI provider (Anthropic, Moonshot, OpenAI, Gemini, Groq, Mistral, DeepSeek, xAI, Together AI, OpenRouter, Perplexity, Cohere, WhatsApp/Meta) with Terms of Service and Privacy Policy links for each.
+* Fixed `wp fahad-ai rag-spike` WP-CLI command: the report is now written to the WordPress uploads directory (`wp-content/uploads/fahad-ai-shopping-assistant-for-woocommerce/RAG-SPIKE-REPORT.md`) instead of the plugin folder.
 
 = 2.14.0 =
 Live-demo deep link.
