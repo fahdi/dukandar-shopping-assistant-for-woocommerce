@@ -37,17 +37,25 @@ final class Fahad_AI_Rag_Spike_CLI {
 	 * [--sizes=<csv>]
 	 * : Catalog sizes for the latency projection. Default 1000,5000,20000.
 	 *
-	 * [--report=<path>]
-	 * : Where to write the markdown report. Default: RAG-SPIKE-REPORT.md inside the WordPress uploads folder.
+	 * [--report=<filename>]
+	 * : Report filename. Always written inside the plugin's own folder in the WordPress
+	 * uploads directory; any directory components are stripped. Default: RAG-SPIKE-REPORT.md.
 	 *
 	 * @when after_wp_load
 	 */
 	public function __invoke( array $args, array $assoc ): void {
 		$k     = max( 1, (int) ( $assoc['k'] ?? 3 ) );
 		$sizes = array_values( array_filter( array_map( 'intval', explode( ',', (string) ( $assoc['sizes'] ?? '1000,5000,20000' ) ) ) ) );
-		$upload  = wp_upload_dir();
-		$default = trailingslashit( $upload['basedir'] ) . 'fahad-ai-shopping-assistant-for-woocommerce/RAG-SPIKE-REPORT.md';
-		$path    = (string) ( $assoc['report'] ?? $default );
+
+		// Reports may only ever land in uploads/<plugin-slug>/ — --report is reduced
+		// to a sanitized basename so neither absolute paths nor ../ traversal can
+		// write anywhere else on the filesystem.
+		$upload = wp_upload_dir();
+		$name   = sanitize_file_name( basename( (string) ( $assoc['report'] ?? '' ) ) );
+		if ( '' === $name ) {
+			$name = 'RAG-SPIKE-REPORT.md';
+		}
+		$path = trailingslashit( $upload['basedir'] ) . 'fahad-ai-shopping-assistant-for-woocommerce/' . $name;
 
 		[ $texts, $vecs, $queries, $mode ] = $this->build_dataset();
 

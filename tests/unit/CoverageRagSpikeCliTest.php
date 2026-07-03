@@ -75,6 +75,23 @@ class CoverageRagSpikeCliTest extends TestCase {
 		Functions\when( 'wp_strip_all_tags' )->alias( static fn( $s ) => trim( preg_replace( '/<[^>]*>/', '', (string) $s ) ) );
 		Functions\when( 'wp_json_encode' )->alias( static fn( $d ) => json_encode( $d ) );
 		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+
+		// Uploads-dir surface: the command may only ever write inside
+		// uploads/fahad-ai-shopping-assistant-for-woocommerce/, so the stubs model a
+		// real uploads basedir under the system temp dir.
+		$this->uploads_basedir = sys_get_temp_dir() . '/fahad-ai-uploads-' . uniqid();
+		Functions\when( 'wp_upload_dir' )->alias( fn() => [ 'basedir' => $this->uploads_basedir ] );
+		Functions\when( 'trailingslashit' )->alias( static fn( $s ) => rtrim( (string) $s, '/\\' ) . '/' );
+		Functions\when( 'sanitize_file_name' )->alias( static fn( $s ) => preg_replace( '/[^A-Za-z0-9._-]/', '-', (string) $s ) );
+		Functions\when( 'wp_mkdir_p' )->alias( static fn( $d ) => is_dir( $d ) || @mkdir( $d, 0777, true ) );
+	}
+
+	/** @var string per-test fake uploads basedir */
+	private string $uploads_basedir = '';
+
+	/** The only directory the command is allowed to write into. */
+	private function report_dir(): string {
+		return $this->uploads_basedir . '/fahad-ai-shopping-assistant-for-woocommerce/';
 	}
 
 	protected function tearDown(): void {
@@ -84,6 +101,16 @@ class CoverageRagSpikeCliTest extends TestCase {
 			}
 		}
 		$this->tmp_files = [];
+		if ( '' !== $this->uploads_basedir && is_dir( $this->uploads_basedir ) ) {
+			$it = new RecursiveIteratorIterator(
+				new RecursiveDirectoryIterator( $this->uploads_basedir, FilesystemIterator::SKIP_DOTS ),
+				RecursiveIteratorIterator::CHILD_FIRST
+			);
+			foreach ( $it as $f ) {
+				$f->isDir() ? rmdir( $f->getPathname() ) : unlink( $f->getPathname() );
+			}
+			rmdir( $this->uploads_basedir );
+		}
 		Monkey\tearDown();
 		parent::tearDown();
 	}
@@ -114,8 +141,8 @@ class CoverageRagSpikeCliTest extends TestCase {
 		// No key configured → canned (offline) dataset path through build_dataset().
 		Functions\when( 'get_option' )->justReturn( '' );
 
-		$path = $this->tmp_path( 'rag-spike-canned-' . uniqid() . '.md' );
-		$this->cli()->__invoke( [], [ 'k' => '2', 'sizes' => '10,20', 'report' => $path ] );
+		$path = $this->report_dir() . 'rag-spike-canned.md';
+		$this->cli()->__invoke( [], [ 'k' => '2', 'sizes' => '10,20', 'report' => 'rag-spike-canned.md' ] );
 
 		// Progress was logged with the canned mode label and the relevance header.
 		$joined = implode( "\n", WP_CLI::$logs );
@@ -142,14 +169,8 @@ class CoverageRagSpikeCliTest extends TestCase {
 	}
 
 	public function test_invoke_defaults_when_no_assoc_args_given(): void {
-		// Empty $assoc exercises the ?? fallbacks for k, sizes and report path.
+		// Empty $assoc exercises the ?? fallbacks for k, sizes and report filename.
 		Functions\when( 'get_option' )->justReturn( '' );
-
-		$default_path = FAHAD_AI_PATH . 'docs/RAG-SPIKE-REPORT.md';
-		$this->tmp_files[] = $default_path;
-		if ( ! is_dir( dirname( $default_path ) ) ) {
-			mkdir( dirname( $default_path ), 0777, true );
-		}
 
 		$this->cli()->__invoke( [], [] );
 
@@ -159,36 +180,68 @@ class CoverageRagSpikeCliTest extends TestCase {
 		$latency_lines = array_filter( WP_CLI::$logs, static fn( $l ) => str_contains( $l, 'p50=' ) );
 		$this->assertCount( 3, $latency_lines, 'default 1000,5000,20000 → three projections' );
 
-		// Wrote to the default FAHAD_AI_PATH report location.
-		$this->assertFileExists( $default_path );
+		// Wrote to the default filename inside the plugin's uploads subdirectory.
+		$this->assertFileExists( $this->report_dir() . 'RAG-SPIKE-REPORT.md' );
+		$this->assertNotNull( WP_CLI::$success );
+	}
+
+	public function test_invoke_confines_report_to_uploads_subdir_even_for_traversal_paths(): void {
+		// WP.org review 30Jun26: --report must not write to arbitrary filesystem
+		// locations. Absolute paths and ../ traversal collapse to a sanitized
+		// basename inside uploads/fahad-ai-shopping-assistant-for-woocommerce/.
+		Functions\when( 'get_option' )->justReturn( '' );
+
+		$outside = sys_get_temp_dir() . '/rag-spike-escape-' . uniqid() . '.md';
+		$this->tmp_files[] = $outside;
+
+		$this->cli()->__invoke( [], [ 'report' => '../../../' . basename( $outside ) ] );
+
+		$this->assertFileDoesNotExist( $outside, 'traversal must not escape the uploads subdir' );
+		$this->assertFileExists( $this->report_dir() . basename( $outside ) );
+		$this->assertNotNull( WP_CLI::$success );
+
+		WP_CLI::reset();
+		$this->cli()->__invoke( [], [ 'report' => $outside ] );
+
+		$this->assertFileDoesNotExist( $outside, 'absolute paths must not escape the uploads subdir' );
+		$this->assertFileExists( $this->report_dir() . basename( $outside ) );
+	}
+
+	public function test_invoke_falls_back_to_default_filename_when_report_sanitizes_to_nothing(): void {
+		Functions\when( 'get_option' )->justReturn( '' );
+
+		$this->cli()->__invoke( [], [ 'report' => '///' ] );
+
+		$this->assertFileExists( $this->report_dir() . 'RAG-SPIKE-REPORT.md' );
 		$this->assertNotNull( WP_CLI::$success );
 	}
 
 	public function test_invoke_warns_when_report_cannot_be_written(): void {
 		Functions\when( 'get_option' )->justReturn( '' );
 
-		// An unwritable path makes file_put_contents return false → warning branch.
-		// file_put_contents emits a PHP warning when the dir is missing; that warning
-		// is the point of the branch, so swallow it locally (PHPUnit would otherwise
-		// surface it) while still asserting the command's own WP_CLI::warning path.
-		$bad_path = '/this/directory/definitely/does/not/exist/report.md';
+		// An unwritable uploads basedir makes file_put_contents return false → the
+		// warning branch. file_put_contents emits a PHP warning when the dir is
+		// missing; that warning is the point of the branch, so swallow it locally
+		// (PHPUnit would otherwise surface it) while still asserting the command's
+		// own WP_CLI::warning path.
+		$this->uploads_basedir = '/dev/null/not-a-dir';
 		set_error_handler( static fn() => true );
 		try {
-			$this->cli()->__invoke( [], [ 'report' => $bad_path ] );
+			$this->cli()->__invoke( [], [ 'report' => 'report.md' ] );
 		} finally {
 			restore_error_handler();
 		}
+		$this->uploads_basedir = '';
 
 		$this->assertNull( WP_CLI::$success );
 		$this->assertNotNull( WP_CLI::$warning );
-		$this->assertStringContainsString( $bad_path, WP_CLI::$warning );
+		$this->assertStringContainsString( 'report.md', WP_CLI::$warning );
 	}
 
 	public function test_invoke_clamps_k_below_one_to_one(): void {
 		Functions\when( 'get_option' )->justReturn( '' );
 
-		$path = $this->tmp_path( 'rag-spike-kclamp-' . uniqid() . '.md' );
-		$this->cli()->__invoke( [], [ 'k' => '0', 'report' => $path ] );
+		$this->cli()->__invoke( [], [ 'k' => '0', 'report' => 'rag-spike-kclamp.md' ] );
 
 		// max(1, 0) → recall@1 in the logged header and the report.
 		$joined = implode( "\n", WP_CLI::$logs );
@@ -198,9 +251,8 @@ class CoverageRagSpikeCliTest extends TestCase {
 	public function test_invoke_filters_empty_sizes_from_csv(): void {
 		Functions\when( 'get_option' )->justReturn( '' );
 
-		$path = $this->tmp_path( 'rag-spike-sizes-' . uniqid() . '.md' );
 		// Trailing/empty tokens and a zero are filtered out by array_filter.
-		$this->cli()->__invoke( [], [ 'sizes' => '5,,0,7', 'report' => $path ] );
+		$this->cli()->__invoke( [], [ 'sizes' => '5,,0,7', 'report' => 'rag-spike-sizes.md' ] );
 
 		$latency_lines = array_filter( WP_CLI::$logs, static fn( $l ) => str_contains( $l, 'p50=' ) );
 		$this->assertCount( 2, $latency_lines, 'only 5 and 7 survive intval+filter' );
@@ -232,8 +284,8 @@ class CoverageRagSpikeCliTest extends TestCase {
 		Functions\when( 'wp_remote_post' )->justReturn( [ 'body' => 'ok' ] );
 		Functions\when( 'wp_remote_retrieve_body' )->justReturn( json_encode( [ 'data' => $embeddings ] ) );
 
-		$path = $this->tmp_path( 'rag-spike-live-' . uniqid() . '.md' );
-		$this->cli()->__invoke( [], [ 'k' => '3', 'sizes' => '10', 'report' => $path ] );
+		$path = $this->report_dir() . 'rag-spike-live.md';
+		$this->cli()->__invoke( [], [ 'k' => '3', 'sizes' => '10', 'report' => 'rag-spike-live.md' ] );
 
 		$joined = implode( "\n", WP_CLI::$logs );
 		$this->assertStringContainsString( 'live embeddings', $joined );
@@ -252,8 +304,7 @@ class CoverageRagSpikeCliTest extends TestCase {
 		Functions\when( 'get_option' )->justReturn( 'sk-test-key' );
 		Functions\when( 'wc_get_products' )->justReturn( [] );
 
-		$path = $this->tmp_path( 'rag-spike-fallback-' . uniqid() . '.md' );
-		$this->cli()->__invoke( [], [ 'report' => $path ] );
+		$this->cli()->__invoke( [], [ 'report' => 'rag-spike-fallback.md' ] );
 
 		$joined = implode( "\n", WP_CLI::$logs );
 		$this->assertStringContainsString( 'canned (offline, no key)', $joined );
