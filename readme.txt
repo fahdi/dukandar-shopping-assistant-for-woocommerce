@@ -4,7 +4,7 @@ Tags: woocommerce, chatbot, ai, cart, assistant
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 2.14.2
+Stable tag: 2.14.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -213,6 +213,12 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.3 =
+Packaging fix: development files are no longer bundled in the distribution zip.
+
+* The release zip now packages only the runtime plugin files (main file, `uninstall.php`, `readme.txt`, `includes/`, `assets/`, `languages/`). Development tooling (`phpcs.xml.dist`, Playwright end-to-end tests, `package.json`) and the marketing website folder are excluded.
+* No plugin code changes.
 
 = 2.14.2 =
 WordPress.org review fixes: working legal links, hardened WP-CLI report path, statically-verifiable REST permissions.
@@ -446,6 +452,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.14.3 =
+Packaging-only release: development files removed from the distribution zip. No functional changes for shoppers or merchants.
 
 = 2.14.2 =
 Maintenance release: refreshed all external-service ToS/privacy links to current URLs, confined the WP-CLI report path to the uploads directory, and made REST permission callbacks statically verifiable. No functional changes for shoppers or merchants.
