@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: Fahad AI Shopping Assistant for WooCommerce
+ * Plugin Name: Dukandaar AI Shopping Assistant for WooCommerce
  * Plugin URI:  https://github.com/fahdi/fahad-ai-shopping-assistant-for-woocommerce
  * Description: AI-powered shopping assistant for WooCommerce, answers questions and manages the cart using OpenAI, Claude, Gemini, Moonshot, and other major AI providers.
- * Version:           2.14.4
+ * Version:           2.14.5
  * Author:      Fahdi Murtaza
  * Author URI:  https://github.com/fahdi
  * License:     GPL v2 or later
@@ -19,7 +19,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FAHAD_AI_VERSION', '2.14.4' );
+define( 'FAHAD_AI_VERSION', '2.14.5' );
 define( 'FAHAD_AI_PATH', plugin_dir_path( __FILE__ ) );
 define( 'FAHAD_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -449,8 +449,8 @@ final class Fahad_AI_Chatbot {
 		$capability = fahad_ai_settings_capability();
 
 		add_options_page(
-			esc_html__( 'Fahad AI Shopping Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ),
-			esc_html__( 'Fahad AI Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+			esc_html__( 'Dukandaar AI Shopping Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+			esc_html__( 'Dukandaar Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ),
 			$capability,
 			'fahad-ai-shopping-assistant-for-woocommerce',
 			'fahad_ai_settings_page'
@@ -476,7 +476,7 @@ add_action( 'plugins_loaded', function () {
 	if ( ! class_exists( 'WooCommerce' ) ) {
 		add_action( 'admin_notices', function () {
 			echo '<div class="notice notice-error"><p><strong>' .
-				esc_html__( 'Fahad AI Shopping Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ) .
+				esc_html__( 'Dukandaar AI Shopping Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ) .
 				'</strong> ' .
 				esc_html__( 'requires WooCommerce to be active.', 'fahad-ai-shopping-assistant-for-woocommerce' ) .
 				'</p></div>';
