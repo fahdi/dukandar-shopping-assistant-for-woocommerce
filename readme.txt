@@ -13,6 +13,10 @@ AI-powered shopping assistant for WooCommerce. Answers customer questions and ma
 
 == Description ==
 
+<img src="https://ps.w.org/fahad-ai-shopping-assistant-for-woocommerce/assets/screenshot-1.gif" alt="Fahad AI answers a product question with grounded store data and a product card">
+
+A shopper asks a product question and the assistant answers with your real catalogue data: an in-stock product card with title, price, and stock status, never an invented fact.
+
 Fahad AI Shopping Assistant adds an intelligent shopping assistant widget to your WooCommerce store. Customers can ask questions about products, get personalised recommendations, and add items to their cart, all through a natural conversational interface.
 
 **Supported AI providers:**
@@ -88,8 +92,9 @@ The conversation history (user messages and assistant replies) and the results o
 
 == Screenshots ==
 
-1. Chat widget on the storefront
-2. Admin settings, provider and API key configuration
+1. The assistant answers a product question with grounded store data and a product card
+2. Chat widget on the storefront
+3. Admin settings, provider and API key configuration
 
 == External services ==
 
