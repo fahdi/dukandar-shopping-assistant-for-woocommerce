@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.7
+Stable tag: 2.14.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.8 =
+Cost safety: a store-wide daily cap keeps your AI spend predictable.
+
+* Added a filterable daily limit on total AI answers (fahad_ai_daily_message_cap, default 0 = unlimited). When reached, the assistant politely points shoppers to human support instead of making more billable calls, and the counter resets each day. This protects against bill-shock from a traffic spike or abuse across many IPs.
 
 = 2.14.7 =
 A gentle, one-time review request appears after two weeks of configured use, so happy stores can help others find Dukandar.
@@ -478,6 +483,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.14.8 =
+Adds an optional store-wide daily usage cap for predictable AI costs. No breaking changes.
 
 = 2.14.7 =
 Adds a one-time review request after two weeks of use. No breaking changes.
