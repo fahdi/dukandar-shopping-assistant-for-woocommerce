@@ -353,7 +353,7 @@ final class Fahad_AI_Memory_Tools {
 	 */
 	public static function register_exporter( array $exporters ): array {
 		$exporters[ self::PRIVACY_KEY ] = [
-			'exporter_friendly_name' => __( 'Dukandaar assistant memory', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+			'exporter_friendly_name' => __( 'Dukandar assistant memory', 'fahad-ai-shopping-assistant-for-woocommerce' ),
 			'callback'               => [ __CLASS__, 'gdpr_export' ],
 		];
 
@@ -369,7 +369,7 @@ final class Fahad_AI_Memory_Tools {
 	 */
 	public static function register_eraser( array $erasers ): array {
 		$erasers[ self::PRIVACY_KEY ] = [
-			'eraser_friendly_name' => __( 'Dukandaar assistant memory', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+			'eraser_friendly_name' => __( 'Dukandar assistant memory', 'fahad-ai-shopping-assistant-for-woocommerce' ),
 			'callback'             => [ __CLASS__, 'gdpr_erase' ],
 		];
 

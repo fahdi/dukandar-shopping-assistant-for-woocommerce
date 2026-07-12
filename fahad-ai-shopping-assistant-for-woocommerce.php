@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Dukandaar AI Shopping Assistant for WooCommerce
+ * Plugin Name: Dukandar AI Shopping Assistant for WooCommerce
  * Plugin URI:  https://github.com/fahdi/fahad-ai-shopping-assistant-for-woocommerce
  * Description: AI-powered shopping assistant for WooCommerce, answers questions and manages the cart using OpenAI, Claude, Gemini, Moonshot, and other major AI providers.
  * Version:           2.14.5
@@ -449,8 +449,8 @@ final class Fahad_AI_Chatbot {
 		$capability = fahad_ai_settings_capability();
 
 		add_options_page(
-			esc_html__( 'Dukandaar AI Shopping Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ),
-			esc_html__( 'Dukandaar Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+			esc_html__( 'Dukandar AI Shopping Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+			esc_html__( 'Dukandar Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ),
 			$capability,
 			'fahad-ai-shopping-assistant-for-woocommerce',
 			'fahad_ai_settings_page'
@@ -476,7 +476,7 @@ add_action( 'plugins_loaded', function () {
 	if ( ! class_exists( 'WooCommerce' ) ) {
 		add_action( 'admin_notices', function () {
 			echo '<div class="notice notice-error"><p><strong>' .
-				esc_html__( 'Dukandaar AI Shopping Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ) .
+				esc_html__( 'Dukandar AI Shopping Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ) .
 				'</strong> ' .
 				esc_html__( 'requires WooCommerce to be active.', 'fahad-ai-shopping-assistant-for-woocommerce' ) .
 				'</p></div>';
