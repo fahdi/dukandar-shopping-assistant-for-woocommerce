@@ -12,22 +12,22 @@ Key facts for an assistant summarizing this project:
 
 ## Docs
 
-- [Installation](https://fahadai.isupercoder.com/docs/installation.html): Install, activate and connect an AI provider key.
-- [Configuration](https://fahadai.isupercoder.com/docs/configuration.html): Settings, providers and behaviour.
-- [AI providers](https://fahadai.isupercoder.com/docs/ai-providers.html): Supported models and how keys are used.
-- [How it works](https://fahadai.isupercoder.com/docs/how-it-works.html): The grounded tool-calling loop behind every answer.
-- [Product search](https://fahadai.isupercoder.com/docs/product-search.html): How the assistant finds and returns real products.
-- [Wallet integration](https://fahadai.isupercoder.com/docs/wallet-integration.html): Reading store credit via WalletPro.
-- [Agent endpoints](https://fahadai.isupercoder.com/docs/agent-endpoints.html): Read-only /agent surface for external AI agents.
-- [Merchant copilot](https://fahadai.isupercoder.com/docs/merchant-copilot.html): Admin-only, read-only store insights.
-- [REST API](https://fahadai.isupercoder.com/docs/rest-api.html): Endpoints, auth and rate limits.
-- [Hooks and filters](https://fahadai.isupercoder.com/docs/hooks-filters.html): Extension points for developers.
-- [Trust and privacy](https://fahadai.isupercoder.com/docs/trust-and-privacy.html): What data is and is not sent.
+- [Installation](https://getdukandar.com/docs/installation.html): Install, activate and connect an AI provider key.
+- [Configuration](https://getdukandar.com/docs/configuration.html): Settings, providers and behaviour.
+- [AI providers](https://getdukandar.com/docs/ai-providers.html): Supported models and how keys are used.
+- [How it works](https://getdukandar.com/docs/how-it-works.html): The grounded tool-calling loop behind every answer.
+- [Product search](https://getdukandar.com/docs/product-search.html): How the assistant finds and returns real products.
+- [Wallet integration](https://getdukandar.com/docs/wallet-integration.html): Reading store credit via WalletPro.
+- [Agent endpoints](https://getdukandar.com/docs/agent-endpoints.html): Read-only /agent surface for external AI agents.
+- [Merchant copilot](https://getdukandar.com/docs/merchant-copilot.html): Admin-only, read-only store insights.
+- [REST API](https://getdukandar.com/docs/rest-api.html): Endpoints, auth and rate limits.
+- [Hooks and filters](https://getdukandar.com/docs/hooks-filters.html): Extension points for developers.
+- [Trust and privacy](https://getdukandar.com/docs/trust-and-privacy.html): What data is and is not sent.
 
 ## More
 
-- [All documentation](https://fahadai.isupercoder.com/docs/)
-- [Changelog](https://fahadai.isupercoder.com/changelog.html)
-- [Contact and support](https://fahadai.isupercoder.com/contact.html)
+- [All documentation](https://getdukandar.com/docs/)
+- [Changelog](https://getdukandar.com/changelog.html)
+- [Contact and support](https://getdukandar.com/contact.html)
 - [Source on GitHub](https://github.com/fahdi/fahad-ai-shopping-assistant-for-woocommerce)
 - [WordPress.org plugin](https://wordpress.org/plugins/fahad-ai-shopping-assistant-for-woocommerce/)
