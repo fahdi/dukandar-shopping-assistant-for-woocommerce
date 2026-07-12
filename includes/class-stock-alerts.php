@@ -510,7 +510,7 @@ final class Fahad_AI_Stock_Alerts {
 	 */
 	public function register_eraser( array $erasers ): array {
 		$erasers['fahad-ai-stock-alerts'] = [
-			'eraser_friendly_name' => __( 'Fahad AI stock alerts', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+			'eraser_friendly_name' => __( 'Dukandaar stock alerts', 'fahad-ai-shopping-assistant-for-woocommerce' ),
 			'callback'             => [ $this, 'gdpr_erase' ],
 		];
 		return $erasers;

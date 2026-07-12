@@ -569,7 +569,7 @@ class CoverageAdminSettingsTest extends TestCase {
 		fahad_ai_settings_page();
 		$out = ob_get_clean();
 
-		$this->assertStringContainsString( 'Fahad AI Shopping Assistant Settings', $out );
+		$this->assertStringContainsString( 'Dukandaar AI Shopping Assistant Settings', $out );
 		$this->assertStringContainsString( 'AI Provider', $out );
 		$this->assertStringContainsString( 'Anthropic API Key', $out );
 		$this->assertStringContainsString( 'Moonshot Region', $out );

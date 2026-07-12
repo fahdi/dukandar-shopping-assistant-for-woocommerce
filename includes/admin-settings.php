@@ -555,7 +555,7 @@ function fahad_ai_settings_page(): void {
 	ksort( $gateable_tools );
 	?>
 	<div class="wrap">
-		<h1><?php esc_html_e( 'Fahad AI Shopping Assistant Settings', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></h1>
+		<h1><?php esc_html_e( 'Dukandaar AI Shopping Assistant Settings', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></h1>
 
 		<form method="post">
 			<?php wp_nonce_field( 'fahad_ai_settings' ); ?>

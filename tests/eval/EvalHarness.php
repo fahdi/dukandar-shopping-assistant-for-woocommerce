@@ -1,6 +1,6 @@
 <?php
 /**
- * Eval harness for the Fahad AI shopping assistant.
+ * Eval harness for the Dukandaar shopping assistant.
  *
  * This is the AI analogue of the unit tests: it drives the REAL agent loop
  * (Fahad_AI_API_Handler::run_anthropic_agent / run_openai_agent) against a
