@@ -122,4 +122,42 @@ final class Fahad_AI_Auth {
 
 		return $local[0] . '***@' . $domain;
 	}
+
+	/**
+	 * The store-wide daily cap on billable AI answers (issue #194). A filterable cost
+	 * ceiling; 0 (the default) means unlimited. Negative filters are clamped to 0.
+	 */
+	public static function daily_cap(): int {
+		return max( 0, (int) apply_filters( 'fahad_ai_daily_message_cap', 0 ) );
+	}
+
+	/**
+	 * How many billable AI answers have been served today. Backed by a single option
+	 * that carries the day it belongs to, so the count resets automatically at the day
+	 * boundary with no cron: a record from any day but today reads as 0.
+	 */
+	public static function daily_count(): int {
+		$data = get_option( 'fahad_ai_daily_count', [] );
+		if ( is_array( $data ) && ( $data['date'] ?? '' ) === gmdate( 'Ymd' ) ) {
+			return (int) ( $data['count'] ?? 0 );
+		}
+		return 0;
+	}
+
+	/** Whether the store has hit its daily cap (never true when unlimited). */
+	public static function daily_cap_reached(): bool {
+		$cap = self::daily_cap();
+		return $cap > 0 && self::daily_count() >= $cap;
+	}
+
+	/**
+	 * Count one billable AI answer against today's total, resetting the counter when the
+	 * stored record belongs to an earlier day. Autoload is off; this option changes often.
+	 */
+	public static function record_daily_message(): void {
+		$today = gmdate( 'Ymd' );
+		$data  = get_option( 'fahad_ai_daily_count', [] );
+		$count = ( is_array( $data ) && ( $data['date'] ?? '' ) === $today ) ? (int) ( $data['count'] ?? 0 ) : 0;
+		update_option( 'fahad_ai_daily_count', [ 'date' => $today, 'count' => $count + 1 ], false );
+	}
 }

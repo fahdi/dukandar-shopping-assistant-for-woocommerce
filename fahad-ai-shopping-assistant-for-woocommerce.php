@@ -3,7 +3,7 @@
  * Plugin Name: Dukandar AI Shopping Assistant for WooCommerce
  * Plugin URI:  https://github.com/fahdi/fahad-ai-shopping-assistant-for-woocommerce
  * Description: AI-powered shopping assistant for WooCommerce, answers questions and manages the cart using OpenAI, Claude, Gemini, Moonshot, and other major AI providers.
- * Version:           2.14.7
+ * Version:           2.14.8
  * Author:      Fahdi Murtaza
  * Author URI:  https://github.com/fahdi
  * License:     GPL v2 or later
@@ -19,7 +19,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FAHAD_AI_VERSION', '2.14.7' );
+define( 'FAHAD_AI_VERSION', '2.14.8' );
 define( 'FAHAD_AI_PATH', plugin_dir_path( __FILE__ ) );
 define( 'FAHAD_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -187,6 +187,20 @@ final class Fahad_AI_Chatbot {
 				__( 'Too many requests. Please wait a moment and try again.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
 				[ 'status' => 429 ]
 			);
+		}
+
+		// Store-wide daily cost ceiling (#194): only the billable AI-answering endpoints
+		// count toward and are gated by the cap; cart and feedback are exempt.
+		$route = (string) $request->get_route();
+		if ( false !== strpos( $route, '/message' ) || false !== strpos( $route, '/stream' ) ) {
+			if ( Fahad_AI_Auth::daily_cap_reached() ) {
+				return new WP_Error(
+					'fahad_ai_daily_cap',
+					__( 'The assistant has reached its limit for today. Please contact us and a person will be glad to help.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+					[ 'status' => 503 ]
+				);
+			}
+			Fahad_AI_Auth::record_daily_message();
 		}
 
 		return true;
