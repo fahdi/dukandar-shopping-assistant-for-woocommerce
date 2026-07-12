@@ -25,6 +25,69 @@ function fahad_ai_is_provider_configured(): bool {
 }
 
 /**
+ * Whether the weekly owner digest is enabled (issue #206). Default ON: the recurring
+ * summary is the main way an owner keeps seeing the plugin's value, so it is opt-out.
+ */
+function fahad_ai_weekly_digest_enabled(): bool {
+	return (bool) get_option( 'fahad_ai_weekly_digest', '1' );
+}
+
+/**
+ * Gate for the weekly digest send (issue #206): only when it is enabled AND there was real
+ * activity in the window. We never email an empty report, which would read as spam and
+ * train the owner to ignore (or disable) the digest.
+ */
+function fahad_ai_should_send_weekly_digest( bool $enabled, int $conversations ): bool {
+	return $enabled && $conversations > 0;
+}
+
+/**
+ * Build the plain-text body of the weekly owner digest (issue #206) from a pre-gathered
+ * stats array. Pure and side-effect free so it is trivially testable; the caller supplies
+ * the analytics and the currency/settings URL. Turns the numbers we already record into a
+ * glanceable "what your assistant did this week" summary, and always tells the owner how
+ * to turn the email off.
+ *
+ * @param array $stats { conversations:int, added_to_cart:int, cart_rate:float(0..1),
+ *                       orders:int|null, total_cost:float, currency:string,
+ *                       top_questions:array<array{question:string,count:int}>,
+ *                       settings_url:string }
+ */
+function fahad_ai_build_weekly_digest( array $stats ): string {
+	$conversations = (int) ( $stats['conversations'] ?? 0 );
+	$cart          = (int) ( $stats['added_to_cart'] ?? 0 );
+	$rate          = (int) round( ( (float) ( $stats['cart_rate'] ?? 0 ) ) * 100 );
+	$orders        = $stats['orders'] ?? null;
+	$cost          = (float) ( $stats['total_cost'] ?? 0 );
+	$currency      = (string) ( $stats['currency'] ?? '' );
+	$settings_url  = (string) ( $stats['settings_url'] ?? '' );
+
+	$lines   = [];
+	$lines[] = 'Your Dukandar shopping assistant, last 7 days';
+	$lines[] = '';
+	$lines[] = 'Conversations: ' . $conversations;
+	$lines[] = 'Added to cart: ' . $cart . ' (' . $rate . '% chat-to-cart)';
+	$lines[] = 'Chat-attributed orders: ' . ( null === $orders ? 'n/a' : (int) $orders );
+	$lines[] = 'AI cost: ' . $currency . number_format( $cost, 2 );
+
+	$top = (array) ( $stats['top_questions'] ?? [] );
+	if ( ! empty( $top ) ) {
+		$lines[] = '';
+		$lines[] = 'Top questions shoppers asked:';
+		$rank    = 1;
+		foreach ( $top as $row ) {
+			$lines[] = $rank . '. ' . (string) ( $row['question'] ?? '' ) . ' (' . (int) ( $row['count'] ?? 0 ) . ')';
+			++$rank;
+		}
+	}
+
+	$lines[] = '';
+	$lines[] = 'Manage or turn this weekly email off in your store admin: ' . $settings_url;
+
+	return implode( "\n", $lines );
+}
+
+/**
  * Admin activation nudge (issue #190): when the plugin is active but the selected
  * provider has no key, the assistant cannot reply, so show a dismissible notice with a
  * one-click link to the settings page. Shown only to users who can manage the assistant
@@ -613,6 +676,7 @@ function fahad_ai_settings_page(): void {
 		update_option( 'fahad_ai_promo_emphasis', sanitize_textarea_field( wp_unslash( $_POST['promo_emphasis']  ?? '' ) ) );
 		update_option( 'fahad_ai_free_shipping_threshold', max( 0, (float) ( $_POST['free_shipping_threshold'] ?? 0 ) ) );
 		update_option( 'fahad_ai_return_policy', sanitize_textarea_field( wp_unslash( $_POST['return_policy'] ?? '' ) ) );
+		update_option( 'fahad_ai_weekly_digest', empty( $_POST['weekly_digest'] ) ? 0 : 1 );
 		update_option( 'fahad_ai_disabled_tools', fahad_ai_sanitize_tool_list( array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['disabled_tools'] ?? [] ) ) ) );
 
 		// Multilingual: default/allowed languages (issue #61). Default 'auto' = detect and
@@ -670,6 +734,7 @@ function fahad_ai_settings_page(): void {
 	$promo_emphasis     = get_option( 'fahad_ai_promo_emphasis',       '' );
 	$free_shipping_threshold = (float) get_option( 'fahad_ai_free_shipping_threshold', 0 );
 	$return_policy      = get_option( 'fahad_ai_return_policy',          '' );
+	$weekly_digest      = fahad_ai_weekly_digest_enabled();
 	$languages          = get_option( 'fahad_ai_languages',            'auto' ); // multilingual (#61)
 	$disabled_tools     = (array) get_option( 'fahad_ai_disabled_tools', [] );
 	$token_budget       = (int) get_option( 'fahad_ai_token_budget',   0 );
@@ -1048,6 +1113,15 @@ function fahad_ai_settings_page(): void {
 						<p class="description">
 							<?php esc_html_e( 'Maximum AI answers the whole store will serve per day, to keep costs predictable. When reached, shoppers are pointed to human support instead of making more billable calls; the count resets each day. 0 = unlimited.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
 						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Weekly Email Digest', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="weekly_digest" value="1" <?php checked( $weekly_digest ); ?>>
+							<?php esc_html_e( 'Email the store admin a weekly summary of what the assistant did: conversations, chat-to-cart rate, attributed orders, cost, and top questions. Sent only when there was activity.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+						</label>
 					</td>
 				</tr>
 				<tr>
