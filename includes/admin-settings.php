@@ -25,6 +25,20 @@ function fahad_ai_is_provider_configured(): bool {
 }
 
 /**
+ * The WooCommerce features this plugin declares compatibility with (issue #208). Single
+ * source of truth, iterated by the before_woocommerce_init hook in the main file. HPOS
+ * (`custom_order_tables`) is safe here because every order access goes through CRUD
+ * (wc_get_orders, $order->get_*()), never a direct wp_posts/wp_postmeta query. Kept as a
+ * list so a new feature is a one-line change with a matching test, and it can never drift
+ * silently empty (which would revert the plugin to showing as "incompatible").
+ *
+ * @return string[]
+ */
+function fahad_ai_wc_compatible_features(): array {
+	return [ 'custom_order_tables' ];
+}
+
+/**
  * Whether the weekly owner digest is enabled (issue #206). Default ON: the recurring
  * summary is the main way an owner keeps seeing the plugin's value, so it is opt-out.
  */
