@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.11
+Stable tag: 2.14.12
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.12 =
+Sell more per order: the assistant can now nudge shoppers toward your free-shipping threshold.
+
+* Added a "Free Shipping Threshold" setting. When you enter the order amount that unlocks free shipping, the assistant can helpfully tell a shopper how much more they need to add to qualify, one of the most reliable ways to lift average order value. It is a grounded fact from your setting, stated plainly and never as pressure, and the assistant will never invent a threshold you have not set.
 
 = 2.14.11 =
 Health guard: get warned if your AI provider stops working, instead of losing sales silently.
@@ -498,6 +503,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.14.12 =
+Adds a Free Shipping Threshold setting so the assistant can nudge shoppers toward free shipping and lift order value. No breaking changes.
 
 = 2.14.11 =
 Adds an admin warning when your AI provider starts failing (usually a bad or expired key), so a dead widget gets noticed and fixed. No breaking changes.

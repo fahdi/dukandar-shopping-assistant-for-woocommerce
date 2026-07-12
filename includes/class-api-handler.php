@@ -897,6 +897,14 @@ Writing style, follow exactly:
 			$lines[] = '- Promotion emphasis (only when genuinely relevant, and never as pressure): ' . $promo;
 		}
 
+		// Free-shipping threshold (issue #202): a grounded, merchant-set fact the model can
+		// use to nudge order value. Only a genuine, helpful "you are X away from free
+		// shipping" prompt, never fabricated and never applied as pressure.
+		$free_shipping = (float) get_option( 'fahad_ai_free_shipping_threshold', 0 );
+		if ( $free_shipping > 0 ) {
+			$lines[] = '- Free shipping: this store offers free shipping on orders over ' . $this->format_localized_amount( $free_shipping ) . '. When a shopper is genuinely close, you may helpfully mention how much more they need to add to qualify; state it as a fact, never as pressure, and never invent a threshold that is not set here.';
+		}
+
 		if ( empty( $lines ) ) {
 			return '';
 		}
