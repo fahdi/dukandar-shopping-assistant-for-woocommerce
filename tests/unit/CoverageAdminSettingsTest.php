@@ -637,6 +637,7 @@ class CoverageAdminSettingsTest extends TestCase {
 			'languages'             => 'English, Urdu',
 			'token_budget'          => '8000',
 			'daily_message_cap'     => '250',
+			'free_shipping_threshold' => '50',
 			'fast_model_routing'    => '1',
 			'fast_model'            => 'claude-haiku-4-5-20251001',
 			'proactive_enabled'     => '1',
@@ -665,6 +666,7 @@ class CoverageAdminSettingsTest extends TestCase {
 		$this->assertSame( 'English, Urdu', $this->options['fahad_ai_languages'] );
 		$this->assertSame( 8000, $this->options['fahad_ai_token_budget'] );
 		$this->assertSame( 250, $this->options['fahad_ai_daily_message_cap'] );
+		$this->assertSame( 50.0, $this->options['fahad_ai_free_shipping_threshold'] );
 		$this->assertSame( 1, $this->options['fahad_ai_fast_model_routing'] );
 		$this->assertSame( 1, $this->options['fahad_ai_proactive_enabled'] );
 		$this->assertSame( 2, $this->options['fahad_ai_proactive_frequency'] );

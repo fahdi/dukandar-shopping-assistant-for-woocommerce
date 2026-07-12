@@ -577,6 +577,24 @@ class CoverageApiHandlerTest extends TestCase {
 		$this->assertStringContainsString( 'Store preferences', $block );
 	}
 
+	public function test_merchant_config_block_includes_free_shipping_threshold(): void {
+		Functions\when( 'wc_get_price_decimal_separator' )->justReturn( '.' );
+		Functions\when( 'wc_get_price_thousand_separator' )->justReturn( ',' );
+		$this->set_option_alias( [ 'fahad_ai_free_shipping_threshold' => 50.0 ] );
+
+		$block = (string) $this->invoke( 'merchant_config_block' );
+
+		$this->assertStringContainsString( 'Free shipping', $block );
+		$this->assertStringContainsString( '$50', $block );
+		$this->assertStringContainsString( 'Store preferences', $block );
+	}
+
+	public function test_merchant_config_block_omits_free_shipping_when_zero(): void {
+		$this->set_option_alias( [ 'fahad_ai_free_shipping_threshold' => 0 ] );
+		$block = (string) $this->invoke( 'merchant_config_block' );
+		$this->assertStringNotContainsString( 'Free shipping', $block );
+	}
+
 	// =========================================================================
 	// language_directive(), specific (non-auto) value (line 918)
 	// =========================================================================

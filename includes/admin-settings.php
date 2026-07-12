@@ -611,6 +611,7 @@ function fahad_ai_settings_page(): void {
 		update_option( 'fahad_ai_tone',           fahad_ai_sanitize_tone( sanitize_text_field( wp_unslash( $_POST['tone'] ?? '' ) ) ) );
 		update_option( 'fahad_ai_off_limits',     sanitize_textarea_field( wp_unslash( $_POST['off_limits']      ?? '' ) ) );
 		update_option( 'fahad_ai_promo_emphasis', sanitize_textarea_field( wp_unslash( $_POST['promo_emphasis']  ?? '' ) ) );
+		update_option( 'fahad_ai_free_shipping_threshold', max( 0, (float) ( $_POST['free_shipping_threshold'] ?? 0 ) ) );
 		update_option( 'fahad_ai_disabled_tools', fahad_ai_sanitize_tool_list( array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['disabled_tools'] ?? [] ) ) ) );
 
 		// Multilingual: default/allowed languages (issue #61). Default 'auto' = detect and
@@ -666,6 +667,7 @@ function fahad_ai_settings_page(): void {
 	$tone               = get_option( 'fahad_ai_tone',                 '' );
 	$off_limits         = get_option( 'fahad_ai_off_limits',           '' );
 	$promo_emphasis     = get_option( 'fahad_ai_promo_emphasis',       '' );
+	$free_shipping_threshold = (float) get_option( 'fahad_ai_free_shipping_threshold', 0 );
 	$languages          = get_option( 'fahad_ai_languages',            'auto' ); // multilingual (#61)
 	$disabled_tools     = (array) get_option( 'fahad_ai_disabled_tools', [] );
 	$token_budget       = (int) get_option( 'fahad_ai_token_budget',   0 );
@@ -963,6 +965,16 @@ function fahad_ai_settings_page(): void {
 						<textarea id="promo_emphasis" name="promo_emphasis" class="large-text" rows="3"><?php echo esc_textarea( $promo_emphasis ); ?></textarea>
 						<p class="description">
 							<?php esc_html_e( 'Optional per-category emphasis, e.g. "Footwear: highlight the winter clearance." The assistant will only mention these when genuinely relevant and never as pressure.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="free_shipping_threshold"><?php esc_html_e( 'Free Shipping Threshold', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
+					<td>
+						<input type="number" id="free_shipping_threshold" name="free_shipping_threshold" min="0" step="0.01"
+							value="<?php echo esc_attr( (string) $free_shipping_threshold ); ?>" class="small-text">
+						<p class="description">
+							<?php esc_html_e( 'Order amount that unlocks free shipping at your store. When set, the assistant can helpfully tell a shopper how much more they need to add to qualify, to lift order value, stated as a fact and never as pressure. 0 = do not mention.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
 						</p>
 					</td>
 				</tr>
