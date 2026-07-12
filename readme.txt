@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.14
+Stable tag: 2.14.15
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.15 =
+Clean install on modern WooCommerce: declared High-Performance Order Storage (HPOS) compatibility.
+
+* The plugin now declares compatibility with WooCommerce High-Performance Order Storage (HPOS / custom order tables), the default for new stores. This removes the "incompatible" warning some stores saw in the Plugins screen and on the HPOS settings page. No behaviour change: the assistant already read orders only through WooCommerce's standard order APIs.
 
 = 2.14.14 =
 See your results without logging in: a weekly email summary of what the assistant did.
@@ -513,6 +518,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.14.15 =
+Declares WooCommerce HPOS (High-Performance Order Storage) compatibility, removing the "incompatible" warning on modern stores. No behaviour change.
 
 = 2.14.14 =
 Adds an optional weekly email digest of the assistant's results to the store admin, sent only when there was activity. No breaking changes.
