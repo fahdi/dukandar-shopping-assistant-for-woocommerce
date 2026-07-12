@@ -1,4 +1,4 @@
-=== Dukandaar AI Shopping Assistant for WooCommerce ===
+=== Dukandar AI Shopping Assistant for WooCommerce ===
 Contributors: fahdi
 Tags: woocommerce, chatbot, ai, cart, assistant
 Requires at least: 6.0
@@ -13,11 +13,11 @@ AI-powered shopping assistant for WooCommerce. Answers customer questions and ma
 
 == Description ==
 
-<a href="https://woo.isupercoder.com/?fahad_demo=What%20wireless%20headphones%20do%20you%20have%20and%20how%20much%3F"><img src="https://ps.w.org/fahad-ai-shopping-assistant-for-woocommerce/assets/screenshot-1.gif" alt="Dukandaar answers a product question with grounded store data and a product card"></a>
+<a href="https://woo.isupercoder.com/?fahad_demo=What%20wireless%20headphones%20do%20you%20have%20and%20how%20much%3F"><img src="https://ps.w.org/fahad-ai-shopping-assistant-for-woocommerce/assets/screenshot-1.gif" alt="Dukandar answers a product question with grounded store data and a product card"></a>
 
 A shopper asks a product question and the assistant answers with your real catalogue data: an in-stock product card with title, price, and stock status, never an invented fact. [Try it live on a real store](https://woo.isupercoder.com/?fahad_demo=What%20wireless%20headphones%20do%20you%20have%20and%20how%20much%3F).
 
-Dukandaar AI Shopping Assistant adds an intelligent shopping assistant widget to your WooCommerce store. Customers can ask questions about products, get personalised recommendations, and add items to their cart, all through a natural conversational interface.
+Dukandar AI Shopping Assistant adds an intelligent shopping assistant widget to your WooCommerce store. Customers can ask questions about products, get personalised recommendations, and add items to their cart, all through a natural conversational interface.
 
 **Supported AI providers:**
 
@@ -58,7 +58,7 @@ This plugin sends data only to the AI provider you configure with an API key. Ev
 
 1. Upload the `fahad-ai-shopping-assistant-for-woocommerce` folder to `/wp-content/plugins/`
 2. Activate the plugin through the **Plugins** menu in WordPress
-3. Navigate to **Settings → Dukandaar Assistant**
+3. Navigate to **Settings → Dukandar Assistant**
 4. Choose your AI provider (Anthropic or Moonshot AI)
 5. Enter your API key
 6. Configure the bot name, greeting message, and accent color
@@ -221,9 +221,9 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 == Changelog ==
 
 = 2.14.5 =
-Rebrand: the plugin is now Dukandaar. Same plugin, same settings, same slug, only the name changed.
+Rebrand: the plugin is now Dukandar. Same plugin, same settings, same slug, only the name changed.
 
-* Renamed the display title to Dukandaar AI Shopping Assistant for WooCommerce. No functional changes; your API keys, settings, and existing configuration are preserved (the internal identifiers and update slug are unchanged).
+* Renamed the display title to Dukandar AI Shopping Assistant for WooCommerce. No functional changes; your API keys, settings, and existing configuration are preserved (the internal identifiers and update slug are unchanged).
 
 = 2.14.4 =
 Editorial pass: plain-text copy with no em-dashes anywhere in the plugin.
@@ -443,7 +443,7 @@ Under the hood:
 * Bumped "Tested up to" to WordPress 7.0
 
 = 1.0.4 =
-* Renamed plugin to "Dukandaar AI Shopping Assistant for WooCommerce" with the `fahad-ai-shopping-assistant-for-woocommerce` slug (final name approved by the WordPress.org Plugin Directory)
+* Renamed plugin to "Dukandar AI Shopping Assistant for WooCommerce" with the `fahad-ai-shopping-assistant-for-woocommerce` slug (final name approved by the WordPress.org Plugin Directory)
 * All option keys, constants, classes, REST namespace, JS handles, and the text domain migrated to the `fahad_ai_` / `fahad-ai-` prefix
 * Replaced raw cURL in the Moonshot streaming path with `wp_remote_post()` plus the documented `http_api_curl` hook for the SSE write callback
 * Added `Requires Plugins: woocommerce` header for WordPress 6.5+ dependency check
@@ -471,7 +471,7 @@ Under the hood:
 == Upgrade Notice ==
 
 = 2.14.5 =
-Rebrand to Dukandaar. Name-only change; settings and functionality are preserved.
+Rebrand to Dukandar. Name-only change; settings and functionality are preserved.
 
 = 2.14.4 =
 Editorial pass: plain-text copy with no em-dashes across the readme, admin UI, and docs. No functional changes for shoppers or merchants.
