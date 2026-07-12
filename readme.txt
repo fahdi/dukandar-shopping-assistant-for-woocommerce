@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.13
+Stable tag: 2.14.14
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.14 =
+See your results without logging in: a weekly email summary of what the assistant did.
+
+* Added an optional weekly email digest to the store admin: conversations, chat-to-cart rate, chat-attributed orders, AI cost, and the top questions shoppers asked, for the last 7 days. It is sent only when there was activity (never an empty email) and can be turned off with one tick in Settings. A regular reminder of the value the assistant is adding, right in your inbox.
 
 = 2.14.13 =
 Fewer abandoned carts: the assistant can now answer return-policy questions accurately from your own words.
@@ -508,6 +513,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.14.14 =
+Adds an optional weekly email digest of the assistant's results to the store admin, sent only when there was activity. No breaking changes.
 
 = 2.14.13 =
 Adds a Return &amp; Refund Policy setting so the assistant can answer return questions accurately from your own words, never inventing terms. No breaking changes.

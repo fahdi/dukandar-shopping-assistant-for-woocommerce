@@ -3,7 +3,7 @@
  * Plugin Name: Dukandar AI Shopping Assistant for WooCommerce
  * Plugin URI:  https://github.com/fahdi/dukandar-shopping-assistant-for-woocommerce
  * Description: AI-powered shopping assistant for WooCommerce, answers questions and manages the cart using OpenAI, Claude, Gemini, Moonshot, and other major AI providers.
- * Version:           2.14.13
+ * Version:           2.14.14
  * Author:      Fahdi Murtaza
  * Author URI:  https://github.com/fahdi
  * License:     GPL v2 or later
@@ -19,7 +19,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FAHAD_AI_VERSION', '2.14.13' );
+define( 'FAHAD_AI_VERSION', '2.14.14' );
 define( 'FAHAD_AI_PATH', plugin_dir_path( __FILE__ ) );
 define( 'FAHAD_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -88,6 +88,62 @@ final class Fahad_AI_Chatbot {
 		// rarely runs. The hook is registered once; the event is scheduled on init.
 		add_action( 'fahad_ai_analytics_purge', [ $this, 'run_analytics_purge' ] );
 		add_action( 'init',                     [ $this, 'schedule_analytics_purge' ] );
+
+		// Weekly owner digest (#206): a recurring inbox summary of the assistant's results
+		// is the strongest retention lever. Register a weekly schedule + event; the send is
+		// gated (opt-out + activity) inside the callback so a quiet store is never emailed.
+		add_filter( 'cron_schedules',            [ $this, 'register_weekly_schedule' ] );
+		add_action( 'fahad_ai_weekly_digest',    [ $this, 'run_weekly_digest' ] );
+		add_action( 'init',                      [ $this, 'schedule_weekly_digest' ] );
+	}
+
+	/** Add a 'fahad_ai_weekly' cron interval (WordPress core has no guaranteed weekly). */
+	public function register_weekly_schedule( array $schedules ): array {
+		if ( ! isset( $schedules['fahad_ai_weekly'] ) ) {
+			$schedules['fahad_ai_weekly'] = [ 'interval' => WEEK_IN_SECONDS, 'display' => 'Once Weekly' ];
+		}
+		return $schedules;
+	}
+
+	/** Ensure the weekly digest event is scheduled (idempotent), mirroring the purge cron. */
+	public function schedule_weekly_digest(): void {
+		if ( ! wp_next_scheduled( 'fahad_ai_weekly_digest' ) ) {
+			wp_schedule_event( time() + DAY_IN_SECONDS, 'fahad_ai_weekly', 'fahad_ai_weekly_digest' );
+		}
+	}
+
+	/**
+	 * Cron callback: gather the last 7 days of analytics and email the store admin a plain
+	 * summary (#206). Gated by fahad_ai_should_send_weekly_digest so an opted-out or quiet
+	 * store is never mailed. The body builder + gate are unit-tested; this is the wiring.
+	 */
+	public function run_weekly_digest(): void {
+		$enabled = fahad_ai_weekly_digest_enabled();
+		$range   = [ 'from' => time() - 7 * DAY_IN_SECONDS ];
+		$store   = Fahad_AI_Analytics::instance();
+		$funnel  = $store->funnel( $range, 'fahad_ai_attribute_orders' );
+
+		if ( ! fahad_ai_should_send_weekly_digest( $enabled, (int) $funnel['conversations'] ) ) {
+			return;
+		}
+
+		$cost = $store->cost_summary( $range );
+		$body = fahad_ai_build_weekly_digest( [
+			'conversations' => (int) $funnel['conversations'],
+			'added_to_cart' => (int) $funnel['added_to_cart'],
+			'cart_rate'     => (float) $funnel['cart_rate'],
+			'orders'        => $funnel['orders'],
+			'total_cost'    => (float) $cost['total_cost'],
+			'currency'      => function_exists( 'get_woocommerce_currency_symbol' ) ? get_woocommerce_currency_symbol() : '',
+			'top_questions' => $store->top_questions( 5, $range ),
+			'settings_url'  => admin_url( 'options-general.php?page=fahad-ai-shopping-assistant-for-woocommerce' ),
+		] );
+
+		wp_mail(
+			get_option( 'admin_email' ),
+			'Your Dukandar assistant: weekly summary',
+			$body
+		);
 	}
 
 	/**
