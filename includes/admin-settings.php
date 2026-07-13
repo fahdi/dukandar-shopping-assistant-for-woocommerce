@@ -504,6 +504,7 @@ function fahad_ai_analytics_page(): void {
 	$feedback    = Fahad_AI_Feedback::instance();
 	$fb          = $feedback->aggregates();
 	$helpful     = $feedback->helpfulness_rate();
+	$down_rated  = $feedback->recent_down( 20 );
 	$export_url  = admin_url( 'admin-post.php' );
 	$page_slug   = 'fahad-ai-analytics';
 	$currency    = function_exists( 'get_woocommerce_currency_symbol' ) ? get_woocommerce_currency_symbol() : '';
@@ -598,6 +599,28 @@ function fahad_ai_analytics_page(): void {
 							<td><?php echo esc_html( '' !== $item['question'] ? $item['question'] : __( '(no question text)', 'fahad-ai-shopping-assistant-for-woocommerce' ) ); ?></td>
 							<td><?php echo esc_html( fahad_ai_analytics_outcome_label( $item['outcome'] ) ); ?></td>
 							<td><?php echo esc_html( fahad_ai_analytics_format_time( $item['created'] ) ); ?></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+		<?php endif; ?>
+
+		<!-- Replies shoppers rated unhelpful (#237): the actionable half of the thumbs data. -->
+		<h2><?php esc_html_e( 'Replies shoppers rated unhelpful', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></h2>
+		<p class="description" style="max-width:55em;"><?php esc_html_e( 'Recent replies a shopper gave a thumbs down, with the reason they left. These are your clearest quality-improvement opportunities: fix the answer at the source (for example in Store Information).', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></p>
+		<?php if ( empty( $down_rated ) ) : ?>
+			<p class="description"><?php esc_html_e( 'No thumbs-down feedback yet.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></p>
+		<?php else : ?>
+			<table class="widefat striped" style="max-width:55em;">
+				<thead><tr>
+					<th><?php esc_html_e( 'Why the shopper was not helped', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></th>
+					<th style="width:14em;"><?php esc_html_e( 'When', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></th>
+				</tr></thead>
+				<tbody>
+					<?php foreach ( $down_rated as $item ) : ?>
+						<tr>
+							<td><?php echo esc_html( '' !== (string) ( $item['reason'] ?? '' ) ? (string) $item['reason'] : __( '(no reason given)', 'fahad-ai-shopping-assistant-for-woocommerce' ) ); ?></td>
+							<td><?php echo esc_html( fahad_ai_analytics_format_time( (int) ( $item['created'] ?? 0 ) ) ); ?></td>
 						</tr>
 					<?php endforeach; ?>
 				</tbody>

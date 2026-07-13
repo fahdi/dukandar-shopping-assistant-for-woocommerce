@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.28
+Stable tag: 2.14.29
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.29 =
+See exactly what to fix: the analytics now list the replies shoppers rated unhelpful, with their reasons.
+
+* The analytics now show recent thumbs-down replies alongside the shopper's own reason, so you can see precisely which answers disappointed customers and fix them at the source (for example in Store Information). The actionable companion to the helpfulness rate.
 
 = 2.14.28 =
 Set your limits with eyes open: the settings page now shows this month's AI spend.
@@ -583,6 +588,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.14.29 =
+The analytics now list the replies shoppers rated unhelpful, with their reasons, so you know what to fix. No breaking changes.
 
 = 2.14.28 =
 The settings page now shows month-to-date AI spend next to the cost limits. No breaking changes.
