@@ -582,6 +582,8 @@ class CoverageAdminSettingsTest extends TestCase {
 		$this->assertStringContainsString( 'name="provider"', $out );
 		// Save button rendered by the submit_button stub.
 		$this->assertStringContainsString( 'fahad_ai_save', $out );
+		// Month-to-date spend context, right where the cost limits are set (#235).
+		$this->assertStringContainsString( 'AI Spend This Month', $out );
 	}
 
 	// ── fahad_ai_settings_page (index-queued notice + gateable tools list) ───────
