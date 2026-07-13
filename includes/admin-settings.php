@@ -145,6 +145,20 @@ function fahad_ai_wc_compatible_features(): array {
 }
 
 /**
+ * Where the assistant's owner emails (welcome, weekly digest) should be sent (issue #253).
+ * Returns the configured Notifications Email when set and valid, otherwise the WordPress admin
+ * email, so the emails reach whoever actually manages the assistant rather than defaulting to a
+ * developer or hosting address.
+ */
+function fahad_ai_notification_email(): string {
+	$custom = trim( (string) get_option( 'fahad_ai_notification_email', '' ) );
+	if ( '' !== $custom && is_email( $custom ) ) {
+		return $custom;
+	}
+	return (string) get_option( 'admin_email', '' );
+}
+
+/**
  * Whether to send the one-time welcome email (issue #229): only once a provider is actually
  * configured (activation has genuinely succeeded) and only if it has not already been sent.
  * The "sent" flag is written by the caller after a successful send, so this stays pure.
@@ -994,6 +1008,7 @@ function fahad_ai_settings_page(): void {
 		update_option( 'fahad_ai_support_contact', sanitize_text_field( wp_unslash( $_POST['support_contact'] ?? '' ) ) );
 		update_option( 'fahad_ai_store_knowledge', sanitize_textarea_field( wp_unslash( $_POST['store_knowledge'] ?? '' ) ) );
 		update_option( 'fahad_ai_weekly_digest', empty( $_POST['weekly_digest'] ) ? 0 : 1 );
+		update_option( 'fahad_ai_notification_email', sanitize_email( wp_unslash( $_POST['notification_email'] ?? '' ) ) );
 		update_option( 'fahad_ai_enabled', empty( $_POST['enabled'] ) ? 0 : 1 );
 		update_option( 'fahad_ai_hide_on_checkout', empty( $_POST['hide_on_checkout'] ) ? 0 : 1 );
 		update_option( 'fahad_ai_disabled_tools', fahad_ai_sanitize_tool_list( array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['disabled_tools'] ?? [] ) ) ) );
@@ -1058,6 +1073,7 @@ function fahad_ai_settings_page(): void {
 	$support_contact    = get_option( 'fahad_ai_support_contact',        '' );
 	$store_knowledge    = get_option( 'fahad_ai_store_knowledge',        '' );
 	$weekly_digest      = fahad_ai_weekly_digest_enabled();
+	$notification_email = get_option( 'fahad_ai_notification_email', '' );
 	$assistant_enabled  = fahad_ai_widget_enabled();
 	$hide_on_checkout   = fahad_ai_hide_on_checkout_enabled();
 	$languages          = get_option( 'fahad_ai_languages',            'auto' ); // multilingual (#61)
@@ -1522,6 +1538,16 @@ function fahad_ai_settings_page(): void {
 							value="<?php echo esc_attr( (string) $rate_limit ); ?>" class="small-text">
 						<p class="description">
 							<?php esc_html_e( 'How many messages a single visitor may send per minute before being asked to slow down. Protects against a single client spamming the assistant and running up cost. Lower it if you see abuse. Default 20.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="notification_email"><?php esc_html_e( 'Notifications Email', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
+					<td>
+						<input type="email" id="notification_email" name="notification_email" class="regular-text"
+							value="<?php echo esc_attr( $notification_email ); ?>" placeholder="<?php echo esc_attr( (string) get_option( 'admin_email', '' ) ); ?>">
+						<p class="description">
+							<?php esc_html_e( 'Where the assistant\'s emails (welcome and weekly digest) are sent. Leave blank to use the WordPress admin email. Set this if a shop manager, rather than the site admin, should receive them.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
 						</p>
 					</td>
 				</tr>
