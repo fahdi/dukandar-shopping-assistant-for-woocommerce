@@ -3,7 +3,7 @@
  * Plugin Name: Dukandar AI Shopping Assistant for WooCommerce
  * Plugin URI:  https://github.com/fahdi/dukandar-shopping-assistant-for-woocommerce
  * Description: AI-powered shopping assistant for WooCommerce, answers questions and manages the cart using OpenAI, Claude, Gemini, Moonshot, and other major AI providers.
- * Version:           2.14.31
+ * Version:           2.14.32
  * Author:      Fahdi Murtaza
  * Author URI:  https://github.com/fahdi
  * License:     GPL v2 or later
@@ -19,7 +19,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FAHAD_AI_VERSION', '2.14.31' );
+define( 'FAHAD_AI_VERSION', '2.14.32' );
 define( 'FAHAD_AI_PATH', plugin_dir_path( __FILE__ ) );
 define( 'FAHAD_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -641,6 +641,10 @@ add_action( 'plugins_loaded', function () {
 	// Approaching-daily-cap warning (issue #210): warn before the daily cap turns shoppers
 	// away at peak time, so the owner can raise it in time. Self-clears at the day boundary.
 	add_action( 'admin_notices', 'fahad_ai_daily_cap_notice' );
+
+	// Monthly-budget over-spend warning (issue #243): warn when this month's AI spend reaches
+	// the owner's budget, before the provider invoice does. Self-resets each month.
+	add_action( 'admin_notices', 'fahad_ai_budget_notice' );
 
 	// Keep product embeddings in step with the catalog (async; no-op without a key).
 	Fahad_AI_Indexer::init();
