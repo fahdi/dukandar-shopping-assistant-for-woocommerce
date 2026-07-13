@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.46
+Stable tag: 2.14.47
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -219,6 +219,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 
 == Changelog ==
 
+= 2.14.47 =
+Recover sold-out moments: the assistant can now offer alternatives when a shopper tries to buy an out-of-stock item.
+
+* When a shopper tries to add an out-of-stock product to the cart, the response now includes that product's real categories, so instead of a dead-end "out of stock" the assistant can say "that one's sold out, want to see other Jackets?" and steer them to in-stock alternatives at the most motivated moment. Only genuine categories are offered.
+
 = 2.14.46 =
 Keep free shipping in view: the assistant now updates free-shipping progress after an item is removed.
 
@@ -430,6 +435,9 @@ Only recent releases are listed here to stay within the changelog length WordPre
 
 
 == Upgrade Notice ==
+
+= 2.14.47 =
+Offers the product's categories when an out-of-stock item can't be added, so the assistant can steer shoppers to in-stock alternatives. No breaking changes.
 
 = 2.14.46 =
 Re-surfaces free-shipping progress after an item is removed so the assistant can nudge shoppers who drop below the threshold. No breaking changes.
