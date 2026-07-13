@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.39
+Stable tag: 2.14.40
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -219,6 +219,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 
 == Changelog ==
 
+= 2.14.40 =
+Savings reassurance at cart review: the assistant can now tell shoppers how much they are saving.
+
+* Viewing the cart now includes a "cart_savings" total computed from your real regular and sale prices across all discounted items, so at the moment shoppers decide whether to check out, the assistant can reinforce "you're saving $42 across your cart." It is omitted whenever nothing is genuinely on sale, so a shopper is never shown a fabricated or zero saving.
+
 = 2.14.39 =
 Honest urgency: the assistant can now tell shoppers exactly how big a discount is.
 
@@ -395,6 +400,9 @@ Only recent releases are listed here to stay within the changelog length WordPre
 
 
 == Upgrade Notice ==
+
+= 2.14.40 =
+Adds a grounded total-savings figure at cart review so the assistant can reassure shoppers how much they are saving. No breaking changes.
 
 = 2.14.39 =
 Adds a grounded "X% off" discount signal from your real prices so the assistant can create honest urgency on genuine sale items. No breaking changes.

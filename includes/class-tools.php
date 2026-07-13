@@ -582,6 +582,33 @@ final class Fahad_AI_Tools {
 		];
 	}
 
+	/**
+	 * Total money saved across a cart from genuinely discounted lines, so at the highest-
+	 * abandonment moment (cart review) the assistant can reinforce "you're saving $X across your
+	 * cart" from real cart data instead of estimating. Pure: the caller supplies each line's
+	 * regular and sale unit price and quantity. A line only counts when its sale price is a real
+	 * reduction below a positive regular price, so non-sale, zero/negative-regular, and negative-
+	 * sale lines contribute nothing. Returns null when there is no genuine saving, so a shopper is
+	 * never shown a fabricated or zero total. Rounds to 2 decimals.
+	 *
+	 * @param array<int, array{regular?: float, sale?: float, quantity?: int}> $lines
+	 */
+	public static function cart_savings( array $lines ): ?float {
+		$total = 0.0;
+
+		foreach ( $lines as $line ) {
+			$regular  = (float) ( $line['regular'] ?? 0 );
+			$sale     = (float) ( $line['sale'] ?? 0 );
+			$quantity = max( 0, (int) ( $line['quantity'] ?? 0 ) );
+
+			if ( $regular > 0 && $sale >= 0 && $sale < $regular ) {
+				$total += ( $regular - $sale ) * $quantity;
+			}
+		}
+
+		return $total > 0 ? round( $total, 2 ) : null;
+	}
+
 	private function view_cart(): array {
 		$cart = WC()->cart;
 
@@ -592,7 +619,8 @@ final class Fahad_AI_Tools {
 			];
 		}
 
-		$items = [];
+		$items         = [];
+		$savings_lines = [];
 		foreach ( $cart->get_cart() as $key => $item ) {
 			/** @var WC_Product $product */
 			$product = $item['data'];
@@ -603,6 +631,13 @@ final class Fahad_AI_Tools {
 				'quantity'      => $item['quantity'],
 				'price'         => wc_price( $product->get_price() ),
 				'line_total'    => wc_price( $item['line_total'] ),
+			];
+
+			$regular         = (float) $product->get_regular_price();
+			$savings_lines[] = [
+				'regular'  => $regular,
+				'sale'     => $product->is_on_sale() ? (float) $product->get_sale_price() : $regular,
+				'quantity' => (int) $item['quantity'],
 			];
 		}
 
@@ -622,6 +657,14 @@ final class Fahad_AI_Tools {
 		$threshold = (float) get_option( 'fahad_ai_free_shipping_threshold', 0 );
 		if ( $threshold > 0 ) {
 			$response['free_shipping'] = self::free_shipping_progress( (float) $cart->get_cart_contents_total(), $threshold );
+		}
+
+		// Grounded savings reassurance (issue #259): at the highest-abandonment moment, surface
+		// the real total saved across on-sale lines so the assistant can reinforce "you're saving
+		// $X across your cart." Omitted entirely when there is nothing genuinely on sale.
+		$cart_savings = self::cart_savings( $savings_lines );
+		if ( null !== $cart_savings ) {
+			$response['cart_savings'] = $cart_savings;
 		}
 
 		return $response;

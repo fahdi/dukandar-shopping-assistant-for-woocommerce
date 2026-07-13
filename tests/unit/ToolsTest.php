@@ -649,6 +649,49 @@ class ToolsTest extends TestCase {
         $this->assertFalse( $result['free_shipping']['qualified'] );
     }
 
+    public function test_view_cart_includes_cart_savings_when_items_on_sale(): void {
+        // A cart with one genuinely discounted line (regular 50, sale 40, x2 => 20 saved).
+        $product = Mockery::mock( WC_Product::class );
+        $product->shouldReceive( 'get_id' )->andReturn( 3 );
+        $product->shouldReceive( 'get_name' )->andReturn( 'Bottle' );
+        $product->shouldReceive( 'get_price' )->andReturn( '40' );
+        $product->shouldReceive( 'get_regular_price' )->andReturn( '50' );
+        $product->shouldReceive( 'get_sale_price' )->andReturn( '40' );
+        $product->shouldReceive( 'is_on_sale' )->andReturn( true );
+
+        $cartItem = [ 'product_id' => 3, 'quantity' => 2, 'line_total' => 80.0, 'data' => $product ];
+
+        $mockCart = Mockery::mock( WC_Cart::class );
+        $mockCart->shouldReceive( 'is_empty' )->andReturn( false );
+        $mockCart->shouldReceive( 'get_cart' )->andReturn( [ 'key_abc' => $cartItem ] );
+        $mockCart->shouldReceive( 'get_cart_contents_count' )->andReturn( 2 );
+        $mockCart->shouldReceive( 'get_cart_subtotal' )->andReturn( '$80.00' );
+        $mockCart->shouldReceive( 'get_cart_total' )->andReturn( '$80.00' );
+        Functions\when( 'WC' )->justReturn( (object) [ 'cart' => $mockCart ] );
+
+        $result = $this->tools()->execute( 'view_cart', [] );
+
+        $this->assertSame( 20.0, $result['cart_savings'] );
+    }
+
+    public function test_view_cart_omits_cart_savings_when_nothing_on_sale(): void {
+        // mockProduct is not on sale, so there is no genuine saving and the field is omitted.
+        $product  = $this->mockProduct( 3, 'Bottle', '34.99' );
+        $cartItem = [ 'product_id' => 3, 'quantity' => 1, 'line_total' => 34.99, 'data' => $product ];
+
+        $mockCart = Mockery::mock( WC_Cart::class );
+        $mockCart->shouldReceive( 'is_empty' )->andReturn( false );
+        $mockCart->shouldReceive( 'get_cart' )->andReturn( [ 'key_abc' => $cartItem ] );
+        $mockCart->shouldReceive( 'get_cart_contents_count' )->andReturn( 1 );
+        $mockCart->shouldReceive( 'get_cart_subtotal' )->andReturn( '$34.99' );
+        $mockCart->shouldReceive( 'get_cart_total' )->andReturn( '$34.99' );
+        Functions\when( 'WC' )->justReturn( (object) [ 'cart' => $mockCart ] );
+
+        $result = $this->tools()->execute( 'view_cart', [] );
+
+        $this->assertArrayNotHasKey( 'cart_savings', $result );
+    }
+
     // ── remove_from_cart ──────────────────────────────────────────────────────
 
     public function test_remove_from_cart_success(): void {
