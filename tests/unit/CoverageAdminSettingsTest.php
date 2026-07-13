@@ -413,9 +413,20 @@ class CoverageAdminSettingsTest extends TestCase {
 
 		Functions\when( 'wp_date' )->alias( static fn( $fmt, $t ) => 'TS:' . $t );
 
+		// Thumbs-down rows: one with a reason, one without, so both branches of the
+		// "replies shoppers rated unhelpful" list render (#237).
+		$this->options[ Fahad_AI_Feedback::OPTION ] = [
+			[ 'rating' => 'down', 'reason' => 'The size guide was wrong', 'created' => $ts, 'message_ref' => 'm1', 'conversation_ref' => 'conv-A' ],
+			[ 'rating' => 'down', 'reason' => '', 'created' => $ts, 'message_ref' => 'm2', 'conversation_ref' => 'conv-B' ],
+		];
+		( new ReflectionProperty( Fahad_AI_Feedback::class, 'instance' ) )->setValue( null, null );
+
 		ob_start();
 		fahad_ai_analytics_page();
 		$out = ob_get_clean();
+
+		$this->assertStringContainsString( 'The size guide was wrong', $out );       // down-rated reply reason (#237)
+		$this->assertStringContainsString( '(no reason given)', $out );              // empty-reason fallback (#237)
 
 		$this->assertStringContainsString( 'Analytics data deleted.', $out );        // purge notice
 		$this->assertStringNotContainsString( 'Analytics logging is currently turned off', $out ); // enabled
