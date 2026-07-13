@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.53
+Stable tag: 2.14.54
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.54 =
+Reliability fix: an awkwardly-phrased price range no longer returns nothing.
+
+* Fixed an edge case where a reversed price range (for example "between $100 and $50") made product search return no results. The range is now normalized (bounds ordered, negatives floored to 0) so an inverted or out-of-range request still returns the products the shopper meant. No change for normal price filters.
 
 = 2.14.53 =
 Reliability fix: product search now safely handles an out-of-range result limit.
@@ -465,6 +470,9 @@ Only recent releases are listed here to stay within the changelog length WordPre
 
 
 == Upgrade Notice ==
+
+= 2.14.54 =
+Reliability fix: normalizes a reversed or negative price range so an awkward request still returns the right products. No breaking changes.
 
 = 2.14.53 =
 Reliability fix: clamps an out-of-range search limit so a bad value can never dump the whole catalogue or return nothing. No breaking changes.

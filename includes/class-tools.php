@@ -145,12 +145,19 @@ final class Fahad_AI_Tools {
 			$base['category'] = [ sanitize_text_field( $input['category'] ) ];
 		}
 
-		if ( isset( $input['min_price'] ) ) {
-			$base['min_price'] = (float) $input['min_price'];
+		// Normalize a model-supplied price range (issue #287): floor negatives and swap an
+		// inverted min/max so an impossible range never silently returns zero results.
+		list( $min_price, $max_price ) = self::normalize_price_range(
+			isset( $input['min_price'] ) ? (float) $input['min_price'] : null,
+			isset( $input['max_price'] ) ? (float) $input['max_price'] : null
+		);
+
+		if ( null !== $min_price ) {
+			$base['min_price'] = $min_price;
 		}
 
-		if ( isset( $input['max_price'] ) ) {
-			$base['max_price'] = (float) $input['max_price'];
+		if ( null !== $max_price ) {
+			$base['max_price'] = $max_price;
 		}
 
 		$query = ! empty( $input['query'] ) ? sanitize_text_field( $input['query'] ) : '';
@@ -420,6 +427,25 @@ final class Fahad_AI_Tools {
 	 */
 	public static function clamp_search_limit( int $requested ): int {
 		return max( 1, min( $requested, 10 ) );
+	}
+
+	/**
+	 * Keep a model-supplied search price range sane: floor negative bounds to 0 (no negative
+	 * prices) and swap an inverted range (min above max) so WooCommerce is never handed an
+	 * impossible range that silently returns zero results, "between $100 and $50" becomes
+	 * $50..$100. A null bound is left as null (no constraint on that side).
+	 *
+	 * @return array{0: ?float, 1: ?float} The normalized [min, max].
+	 */
+	public static function normalize_price_range( ?float $min, ?float $max ): array {
+		$min = ( null === $min ) ? null : max( 0.0, $min );
+		$max = ( null === $max ) ? null : max( 0.0, $max );
+
+		if ( null !== $min && null !== $max && $min > $max ) {
+			return [ $max, $min ];
+		}
+
+		return [ $min, $max ];
 	}
 
 	/**
