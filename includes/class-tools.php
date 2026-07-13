@@ -324,6 +324,20 @@ final class Fahad_AI_Tools {
 		);
 	}
 
+	/**
+	 * Whether a product is genuinely low on stock (issue #222), so the assistant can surface an
+	 * HONEST "only N left" scarcity signal from real WooCommerce data, never a fabricated one.
+	 * True only when the product is in stock and tracking a positive quantity at or below the
+	 * store's low-stock threshold. Unmanaged stock (null quantity), zero, or out-of-stock is
+	 * never "low". The threshold is floored at 1 so a misconfigured 0 still flags the last unit.
+	 */
+	public static function low_stock_flag( bool $in_stock, ?int $stock_qty, int $threshold ): bool {
+		if ( ! $in_stock || null === $stock_qty || $stock_qty <= 0 ) {
+			return false;
+		}
+		return $stock_qty <= max( 1, $threshold );
+	}
+
 	private function get_product_details( array $input ): array {
 		$product_id = absint( $input['product_id'] ?? 0 );
 		$product    = wc_get_product( $product_id );
@@ -344,6 +358,7 @@ final class Fahad_AI_Tools {
 			'sku'               => $product->get_sku(),
 			'in_stock'          => $product->is_in_stock(),
 			'stock_qty'         => $product->get_stock_quantity(),
+			'low_stock'         => self::low_stock_flag( $product->is_in_stock(), $product->get_stock_quantity(), (int) get_option( 'woocommerce_notify_low_stock_amount', 2 ) ),
 			'type'              => $product->get_type(),
 			'image'             => $this->product_image_url( $product ),
 			'url'               => get_permalink( $product->get_id() ),
