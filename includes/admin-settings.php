@@ -25,6 +25,16 @@ function fahad_ai_is_provider_configured(): bool {
 }
 
 /**
+ * Whether the assistant is switched on (issue #231). Default ON; a soft pause an owner can
+ * toggle for maintenance, a cost scare, or while changing settings, without deactivating the
+ * plugin (which would lose no settings but is a heavier, all-or-nothing action). When off,
+ * the widget is not rendered and billable chat requests are refused, so no AI calls are made.
+ */
+function fahad_ai_widget_enabled(): bool {
+	return (bool) get_option( 'fahad_ai_enabled', '1' );
+}
+
+/**
  * The WooCommerce features this plugin declares compatibility with (issue #208). Single
  * source of truth, iterated by the before_woocommerce_init hook in the main file. HPOS
  * (`custom_order_tables`) is safe here because every order access goes through CRUD
@@ -792,6 +802,7 @@ function fahad_ai_settings_page(): void {
 		update_option( 'fahad_ai_support_contact', sanitize_text_field( wp_unslash( $_POST['support_contact'] ?? '' ) ) );
 		update_option( 'fahad_ai_store_knowledge', sanitize_textarea_field( wp_unslash( $_POST['store_knowledge'] ?? '' ) ) );
 		update_option( 'fahad_ai_weekly_digest', empty( $_POST['weekly_digest'] ) ? 0 : 1 );
+		update_option( 'fahad_ai_enabled', empty( $_POST['enabled'] ) ? 0 : 1 );
 		update_option( 'fahad_ai_disabled_tools', fahad_ai_sanitize_tool_list( array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['disabled_tools'] ?? [] ) ) ) );
 
 		// Multilingual: default/allowed languages (issue #61). Default 'auto' = detect and
@@ -852,6 +863,7 @@ function fahad_ai_settings_page(): void {
 	$support_contact    = get_option( 'fahad_ai_support_contact',        '' );
 	$store_knowledge    = get_option( 'fahad_ai_store_knowledge',        '' );
 	$weekly_digest      = fahad_ai_weekly_digest_enabled();
+	$assistant_enabled  = fahad_ai_widget_enabled();
 	$languages          = get_option( 'fahad_ai_languages',            'auto' ); // multilingual (#61)
 	$disabled_tools     = (array) get_option( 'fahad_ai_disabled_tools', [] );
 	$token_budget       = (int) get_option( 'fahad_ai_token_budget',   0 );
@@ -1231,6 +1243,15 @@ function fahad_ai_settings_page(): void {
 
 			<h2 class="title"><?php esc_html_e( 'Cost &amp; Performance', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></h2>
 			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Enable Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="enabled" value="1" <?php checked( $assistant_enabled ); ?>>
+							<?php esc_html_e( 'Show the assistant and answer shoppers. Untick to pause it everywhere without deactivating the plugin: the widget disappears and no AI calls are made, but all your settings are kept.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+						</label>
+					</td>
+				</tr>
 				<tr>
 					<th scope="row"><label for="token_budget"><?php esc_html_e( 'Conversation Token Budget', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
 					<td>
