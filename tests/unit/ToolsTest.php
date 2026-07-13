@@ -194,6 +194,34 @@ class ToolsTest extends TestCase {
         }
     }
 
+    public function test_search_min_rating_returns_only_well_rated_products(): void {
+        // A quality-conscious "4+ stars" search must drop the lower-rated product.
+        $high = $this->mockProduct( 1, 'Great Jacket', '80' );
+        $high->shouldReceive( 'get_average_rating' )->andReturn( '4.8' );
+        $low = $this->mockProduct( 2, 'Meh Jacket', '80' );
+        $low->shouldReceive( 'get_average_rating' )->andReturn( '3.0' );
+        Functions\when( 'wc_get_products' )->justReturn( [ $high, $low ] );
+
+        $result = $this->tools()->execute( 'search_products', [ 'query' => 'jacket', 'min_rating' => 4.0 ] );
+
+        $this->assertSame( 1, $result['found'], 'Only the 4+ star product must survive.' );
+        $this->assertSame( 1, $result['products'][0]['id'] );
+    }
+
+    public function test_search_min_rating_param_exposed_in_schema(): void {
+        $defs  = $this->tools()->builtin_definitions();
+        $search = null;
+        foreach ( $defs as $d ) {
+            if ( 'search_products' === $d['name'] ) {
+                $search = $d;
+                break;
+            }
+        }
+        $props = $search['parameters']['properties'] ?? [];
+        $this->assertArrayHasKey( 'min_rating', $props );
+        $this->assertSame( 'number', $props['min_rating']['type'] ?? null );
+    }
+
     public function test_search_summary_flags_highly_rated_from_real_data(): void {
         // A well-reviewed product (4.5 stars, 8 reviews via mockProduct defaults) must carry the
         // decision-ready social-proof flag in list results, so the assistant can lead with it.

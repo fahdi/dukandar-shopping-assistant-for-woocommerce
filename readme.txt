@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.48
+Stable tag: 2.14.49
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.49 =
+Find the good stuff: shoppers can now ask for well-rated products and get a precise result.
+
+* Product search gains an opt-in minimum-rating filter, so when a shopper asks for "top-rated" or "4-star-and-up" jackets the assistant returns only products whose real average rating clears that bar, composing with category, price, and on-sale. Unset by default, so nothing changes unless a rating is asked for.
 
 = 2.14.48 =
 Social proof at first glance: the assistant can now flag top-rated products while listing options.
@@ -440,6 +445,9 @@ Only recent releases are listed here to stay within the changelog length WordPre
 
 
 == Upgrade Notice ==
+
+= 2.14.49 =
+Adds an opt-in minimum-rating filter to product search so shoppers can narrow directly to well-rated products. No breaking changes.
 
 = 2.14.48 =
 Surfaces the grounded highly-rated flag in product list results so the assistant can lead with social proof while listing options. No breaking changes.
