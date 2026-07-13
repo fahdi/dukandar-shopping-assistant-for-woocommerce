@@ -546,6 +546,27 @@ class ToolsTest extends TestCase {
 
         $this->assertFalse( $result['success'] );
         $this->assertStringContainsString( 'out of stock', strtolower( $result['error'] ) );
+        // No categories resolvable (get_the_terms default []) => no suggestions field.
+        $this->assertArrayNotHasKey( 'suggested_categories', $result );
+    }
+
+    public function test_add_to_cart_out_of_stock_offers_category_alternatives(): void {
+        // A sold-out add is a high-intent dead end; the failure must carry the product's real
+        // categories so the assistant can redirect ("want to see other Jackets?").
+        $product = Mockery::mock( WC_Product::class );
+        $product->shouldReceive( 'is_visible' )->andReturn( true );
+        $product->shouldReceive( 'is_in_stock' )->andReturn( false );
+        $product->shouldReceive( 'get_name' )->andReturn( 'Sold Out Jacket' );
+        Functions\when( 'wc_get_product' )->justReturn( $product );
+        Functions\when( 'get_the_terms' )->justReturn( [
+            (object) [ 'name' => 'Jackets' ],
+            (object) [ 'name' => 'Outerwear' ],
+        ] );
+
+        $result = $this->tools()->execute( 'add_to_cart', [ 'product_id' => 10 ] );
+
+        $this->assertFalse( $result['success'] );
+        $this->assertSame( [ 'Jackets', 'Outerwear' ], $result['suggested_categories'] );
     }
 
     public function test_add_to_cart_fails_for_nonexistent_product(): void {

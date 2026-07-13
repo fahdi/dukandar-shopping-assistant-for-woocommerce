@@ -572,7 +572,7 @@ final class Fahad_AI_Tools {
 		}
 
 		if ( ! $item->is_in_stock() ) {
-			return [
+			$response = [
 				'success' => false,
 				'error'   => sprintf(
 					/* translators: %s: product (or selected variation) name */
@@ -580,6 +580,16 @@ final class Fahad_AI_Tools {
 					$item->get_name()
 				),
 			];
+
+			// Recover a high-intent dead end (issue #273): a sold-out add is an active buy attempt,
+			// so offer the product's own categories and let the assistant point the shopper to
+			// in-stock alternatives instead of ending at "out of stock". Omitted when it has none.
+			$categories = self::suggested_categories( get_the_terms( $product_id, 'product_cat' ), 3 );
+			if ( ! empty( $categories ) ) {
+				$response['suggested_categories'] = $categories;
+			}
+
+			return $response;
 		}
 
 		$cart_item_key = WC()->cart->add_to_cart( $product_id, $quantity, $variation_id );
