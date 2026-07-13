@@ -40,6 +40,7 @@ final class Fahad_AI_Tools {
 						'min_price' => [ 'type' => 'number',  'description' => 'Minimum price' ],
 						'max_price' => [ 'type' => 'number',  'description' => 'Maximum price' ],
 						'on_sale'   => [ 'type' => 'boolean', 'description' => 'When true, return ONLY products that are currently on sale (a reduced price). Use this whenever the customer asks what is on sale, about deals, discounts, or clearance, it composes with category and price.' ],
+						'min_rating' => [ 'type' => 'number', 'description' => 'When set (e.g. 4), return ONLY products whose average customer rating is at least this many stars. Use whenever the customer asks for well-rated, top-rated, best-reviewed, or highly rated products; it composes with query, category, price, and on_sale.' ],
 						'limit'     => [ 'type' => 'integer', 'description' => 'Max results (default 5, max 10)' ],
 					],
 				],
@@ -118,12 +119,17 @@ final class Fahad_AI_Tools {
 		// "what is on sale" from real data instead of guessing. Fetch wider when filtering
 		// by sale so the post-filter has enough candidates (sale items may sit beyond the
 		// first few by relevance), then cap to the display limit below.
-		$only_sale = ! empty( $input['on_sale'] );
-		$limit     = min( (int) ( $input['limit'] ?? 5 ), 10 );
+		$only_sale  = ! empty( $input['on_sale'] );
+		$min_rating = isset( $input['min_rating'] ) ? max( 0.0, (float) $input['min_rating'] ) : 0.0;
+		$limit      = min( (int) ( $input['limit'] ?? 5 ), 10 );
+
+		// Widen the fetch when a post-query filter (on-sale or min-rating) will thin the results,
+		// so enough candidates survive to fill the display limit; capped back down after filtering.
+		$widen = $only_sale || $min_rating > 0.0;
 
 		$base = [
 			'status'  => 'publish',
-			'limit'   => $only_sale ? 50 : $limit,
+			'limit'   => $widen ? 50 : $limit,
 			'orderby' => 'relevance',
 		];
 
@@ -181,6 +187,18 @@ final class Fahad_AI_Tools {
 			}
 		}
 
+		// Min-rating filter (issue #277): keep only products whose real average rating clears the
+		// requested bar. Applied after query resolution so the count is honest; opt-in via the
+		// pure rating_passes() guard, so an unset/zero minimum never removes anything.
+		if ( $min_rating > 0.0 ) {
+			$products = array_values(
+				array_filter(
+					$products,
+					static fn( $p ) => $p instanceof WC_Product && self::rating_passes( (float) $p->get_average_rating(), $min_rating )
+				)
+			);
+		}
+
 		// On-sale filter (issue #137): keep only products WooCommerce reports as on sale,
 		// then cap to the display limit. Applied after all query resolution so the cards
 		// always match an "on sale" claim and the count is honest.
@@ -195,6 +213,9 @@ final class Fahad_AI_Tools {
 				0,
 				$limit
 			);
+		} elseif ( $widen ) {
+			// Rating-only filter widened the fetch; cap back down to the display limit.
+			$products = array_slice( $products, 0, $limit );
 		}
 
 		if ( empty( $products ) ) {
@@ -372,6 +393,15 @@ final class Fahad_AI_Tools {
 	 */
 	public static function bestseller_flag( int $total_sales, int $threshold ): bool {
 		return $threshold > 0 && $total_sales >= $threshold;
+	}
+
+	/**
+	 * Whether a product's average rating clears a requested minimum, for the search min_rating
+	 * filter. A non-positive minimum (unset) passes everything, so the filter is strictly opt-in
+	 * and never hides products when the shopper has not asked to narrow by rating.
+	 */
+	public static function rating_passes( float $rating, float $min_rating ): bool {
+		return $min_rating <= 0.0 || $rating >= $min_rating;
 	}
 
 	/**
