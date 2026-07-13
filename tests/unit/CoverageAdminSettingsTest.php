@@ -60,6 +60,7 @@ class CoverageAdminSettingsTest extends TestCase {
 		Functions\stubs( [
 			'sanitize_text_field'             => fn( $s ) => is_string( $s ) ? trim( strip_tags( $s ) ) : '',
 			'sanitize_textarea_field'         => fn( $s ) => is_string( $s ) ? trim( strip_tags( $s ) ) : '',
+			'sanitize_email'                  => fn( $s ) => is_string( $s ) ? trim( $s ) : '',
 			// Mirror WP: lowercase FIRST, then strip to the [a-z0-9_-] slug charset.
 			'sanitize_key'                    => fn( $s ) => preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $s ) ),
 			'sanitize_hex_color'              => fn( $s ) => is_string( $s ) ? $s : '',
@@ -646,6 +647,7 @@ class CoverageAdminSettingsTest extends TestCase {
 			'custom_base_url'       => 'https://api.example.com/v1',
 			'bot_name'              => 'Helper',
 			'greeting'              => 'Hello there',
+			'notification_email'    => 'shop@store.example',
 			'system_prompt'         => 'Be nice',
 			'accent_color'          => '#abcdef',
 			'tone'                  => 'professional',
@@ -688,6 +690,7 @@ class CoverageAdminSettingsTest extends TestCase {
 		$this->assertSame( 'china', $this->options['fahad_ai_moonshot_region'] );
 		$this->assertSame( 'Helper', $this->options['fahad_ai_bot_name'] );
 		$this->assertSame( 'Be nice', $this->options['fahad_ai_system_prompt'] );
+		$this->assertSame( 'shop@store.example', $this->options['fahad_ai_notification_email'] );
 		$this->assertSame( 'professional', $this->options['fahad_ai_tone'] );
 		$this->assertSame( 'English, Urdu', $this->options['fahad_ai_languages'] );
 		$this->assertSame( 8000, $this->options['fahad_ai_token_budget'] );
