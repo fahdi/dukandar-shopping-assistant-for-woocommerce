@@ -160,6 +160,27 @@ function fahad_ai_build_weekly_digest( array $stats ): string {
 		}
 	}
 
+	// Quality-gap list (issue #239): the reasons shoppers gave when they rated a reply
+	// unhelpful. The feedback companion to the unanswered questions above; both point the
+	// owner at concrete fixes. Distinct, non-blank reasons only.
+	$down_rated = (array) ( $stats['down_rated'] ?? [] );
+	$reasons    = [];
+	foreach ( $down_rated as $row ) {
+		$reason = trim( (string) ( $row['reason'] ?? '' ) );
+		if ( '' !== $reason && ! in_array( $reason, $reasons, true ) ) {
+			$reasons[] = $reason;
+		}
+	}
+	if ( ! empty( $reasons ) ) {
+		$lines[] = '';
+		$lines[] = 'Replies shoppers rated unhelpful (fix these at the source, for example in Store Information):';
+		$rank    = 1;
+		foreach ( $reasons as $reason ) {
+			$lines[] = $rank . '. ' . $reason;
+			++$rank;
+		}
+	}
+
 	$lines[] = '';
 	$lines[] = 'Manage or turn this weekly email off in your store admin: ' . $settings_url;
 

@@ -140,4 +140,41 @@ class CoverageWeeklyDigestTest extends TestCase {
 		$stats['unanswered'] = [];
 		$this->assertStringNotContainsString( 'could not answer', fahad_ai_build_weekly_digest( $stats ) );
 	}
+
+	// ── down-rated reply reasons section (issue #239) ────────────────────────────
+
+	public function test_build_lists_down_rated_reasons(): void {
+		$stats               = $this->stats();
+		$stats['down_rated'] = [
+			[ 'reason' => 'The size guide was wrong' ],
+			[ 'reason' => 'Said it was in stock but it was not' ],
+		];
+
+		$body = fahad_ai_build_weekly_digest( $stats );
+
+		$this->assertStringContainsString( 'rated unhelpful', $body );
+		$this->assertStringContainsString( 'The size guide was wrong', $body );
+		$this->assertStringContainsString( 'Said it was in stock but it was not', $body );
+		$this->assertStringNotContainsString( "\u{2014}", $body );
+		$this->assertStringNotContainsString( "\u{2013}", $body );
+	}
+
+	public function test_build_dedupes_and_skips_blank_down_rated_reasons(): void {
+		$stats               = $this->stats();
+		$stats['down_rated'] = [
+			[ 'reason' => 'Wrong delivery estimate' ],
+			[ 'reason' => '' ],                          // blank, skipped
+			[ 'reason' => 'Wrong delivery estimate' ],   // duplicate, collapsed
+		];
+
+		$body  = fahad_ai_build_weekly_digest( $stats );
+		$count = substr_count( $body, 'Wrong delivery estimate' );
+		$this->assertSame( 1, $count, 'Duplicate down-rated reasons collapse to one line.' );
+	}
+
+	public function test_build_omits_down_rated_section_when_none(): void {
+		$stats               = $this->stats();
+		$stats['down_rated'] = [];
+		$this->assertStringNotContainsString( 'rated unhelpful', fahad_ai_build_weekly_digest( $stats ) );
+	}
 }

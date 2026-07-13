@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.29
+Stable tag: 2.14.30
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.30 =
+Your weekly email now includes what shoppers disliked, so the whole fix-list is in one place.
+
+* The weekly digest now lists the reasons shoppers rated a reply unhelpful, alongside the questions the assistant could not answer. Both halves of the action list, content gaps and quality gaps, land in your inbox each week so you know exactly what to improve without opening the dashboard.
 
 = 2.14.29 =
 See exactly what to fix: the analytics now list the replies shoppers rated unhelpful, with their reasons.
@@ -588,6 +593,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.14.30 =
+The weekly digest now also lists the reasons shoppers rated replies unhelpful. No breaking changes.
 
 = 2.14.29 =
 The analytics now list the replies shoppers rated unhelpful, with their reasons, so you know what to fix. No breaking changes.
