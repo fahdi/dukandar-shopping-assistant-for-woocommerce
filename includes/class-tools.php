@@ -202,6 +202,17 @@ final class Fahad_AI_Tools {
 			}
 		}
 
+		// Respect the store's catalog policy (issue #289): when the merchant hides out-of-stock
+		// items from the shop, hide them from assistant search too, so it never recommends a
+		// product the shopper cannot buy. Unconditional filter; a no-hide store keeps everything.
+		$hide_out_of_stock = ( 'yes' === get_option( 'woocommerce_hide_out_of_stock_items' ) );
+		$products          = array_values(
+			array_filter(
+				$products,
+				static fn( $p ) => $p instanceof WC_Product && self::stock_visible( $p->is_in_stock(), $hide_out_of_stock )
+			)
+		);
+
 		// Min-rating filter (issue #277): keep only products whose real average rating clears the
 		// requested bar. Applied after query resolution so the count is honest; opt-in via the
 		// pure rating_passes() guard, so an unset/zero minimum never removes anything.
@@ -437,6 +448,16 @@ final class Fahad_AI_Tools {
 	 *
 	 * @return array{0: ?float, 1: ?float} The normalized [min, max].
 	 */
+	/**
+	 * Whether a product should appear in search given the store's "hide out of stock items"
+	 * catalog setting. In-stock products are always visible; an out-of-stock product is hidden
+	 * only when the merchant has opted to hide out-of-stock items, so the assistant matches what
+	 * the shopper sees everywhere else on the site and never recommends something they cannot buy.
+	 */
+	public static function stock_visible( bool $in_stock, bool $hide_out_of_stock ): bool {
+		return $in_stock || ! $hide_out_of_stock;
+	}
+
 	public static function normalize_price_range( ?float $min, ?float $max ): array {
 		$min = ( null === $min ) ? null : max( 0.0, $min );
 		$max = ( null === $max ) ? null : max( 0.0, $max );

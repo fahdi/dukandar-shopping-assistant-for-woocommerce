@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.54
+Stable tag: 2.14.55
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.55 =
+Consistency: search now respects your "hide out of stock items" setting.
+
+* If your store hides out-of-stock products from the catalogue, the assistant now hides them from search results too, so it never recommends something a shopper cannot buy. When the setting is off (the default), results are unchanged.
 
 = 2.14.54 =
 Reliability fix: an awkwardly-phrased price range no longer returns nothing.
@@ -470,6 +475,9 @@ Only recent releases are listed here to stay within the changelog length WordPre
 
 
 == Upgrade Notice ==
+
+= 2.14.55 =
+Search now respects your "hide out of stock items" catalog setting, so the assistant does not recommend products shoppers cannot buy. No breaking changes.
 
 = 2.14.54 =
 Reliability fix: normalizes a reversed or negative price range so an awkward request still returns the right products. No breaking changes.

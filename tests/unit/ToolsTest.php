@@ -208,6 +208,35 @@ class ToolsTest extends TestCase {
         $this->assertSame( 1, $result['products'][0]['id'] );
     }
 
+    public function test_search_hides_out_of_stock_when_store_hides_them(): void {
+        // With the store's "hide out of stock" catalog setting on, a sold-out product must be
+        // dropped from results so the assistant never recommends something the shopper can't buy.
+        $inStock = $this->mockProduct( 1, 'Available Jacket', '80' );
+        $soldOut = $this->mockProduct( 2, 'Sold Out Jacket', '80' );
+        $soldOut->shouldReceive( 'is_in_stock' )->andReturn( false );
+        Functions\when( 'wc_get_products' )->justReturn( [ $inStock, $soldOut ] );
+        Functions\when( 'get_option' )->alias(
+            fn( $k, $d = '' ) => 'woocommerce_hide_out_of_stock_items' === $k ? 'yes' : $d
+        );
+
+        $result = $this->tools()->execute( 'search_products', [ 'query' => 'jacket' ] );
+
+        $this->assertSame( 1, $result['found'] );
+        $this->assertSame( 1, $result['products'][0]['id'] );
+    }
+
+    public function test_search_keeps_out_of_stock_when_store_does_not_hide_them(): void {
+        // Default (setting off): out-of-stock products remain in results, behaviour unchanged.
+        $inStock = $this->mockProduct( 1, 'Available Jacket', '80' );
+        $soldOut = $this->mockProduct( 2, 'Sold Out Jacket', '80' );
+        $soldOut->shouldReceive( 'is_in_stock' )->andReturn( false );
+        Functions\when( 'wc_get_products' )->justReturn( [ $inStock, $soldOut ] );
+
+        $result = $this->tools()->execute( 'search_products', [ 'query' => 'jacket' ] );
+
+        $this->assertSame( 2, $result['found'] );
+    }
+
     public function test_search_inverted_price_range_is_normalized_for_the_query(): void {
         // "between $100 and $50" must reach WooCommerce as $50..$100, not an impossible range.
         $captured = null;
