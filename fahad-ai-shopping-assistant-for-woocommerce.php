@@ -3,7 +3,7 @@
  * Plugin Name: Dukandar AI Shopping Assistant for WooCommerce
  * Plugin URI:  https://github.com/fahdi/dukandar-shopping-assistant-for-woocommerce
  * Description: AI-powered shopping assistant for WooCommerce, answers questions and manages the cart using OpenAI, Claude, Gemini, Moonshot, and other major AI providers.
- * Version:           2.14.59
+ * Version:           2.14.60
  * Author:      Fahdi Murtaza
  * Author URI:  https://github.com/fahdi
  * License:     GPL v2 or later
@@ -19,7 +19,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FAHAD_AI_VERSION', '2.14.59' );
+define( 'FAHAD_AI_VERSION', '2.14.60' );
 define( 'FAHAD_AI_PATH', plugin_dir_path( __FILE__ ) );
 define( 'FAHAD_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -117,6 +117,18 @@ final class Fahad_AI_Chatbot {
 		// Dashboard glance (#245): put the assistant's headline numbers on the WordPress
 		// dashboard the owner sees on every login. The render is unit-tested; this is wiring.
 		add_action( 'wp_dashboard_setup',        [ $this, 'register_dashboard_widget' ] );
+
+		// Observe swallowed tool failures (#299): the registry fires fahad_ai_tool_error when a
+		// tool throws. Log it under WP_DEBUG so a real bug is diagnosable; the hook stays open for
+		// error-monitoring plugins. The registry fire is unit-tested; this default listener is wiring.
+		add_action( 'fahad_ai_tool_error',       [ $this, 'log_tool_error' ], 10, 2 );
+	}
+
+	/** Default listener for fahad_ai_tool_error (#299): log a thrown tool failure under WP_DEBUG. */
+	public function log_tool_error( string $name, \Throwable $e ): void {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( sprintf( 'Dukandar AI: tool "%s" failed: %s in %s:%d', $name, $e->getMessage(), $e->getFile(), $e->getLine() ) );
+		}
 	}
 
 	/** Register the at-a-glance dashboard widget for users who can manage the assistant (#245). */

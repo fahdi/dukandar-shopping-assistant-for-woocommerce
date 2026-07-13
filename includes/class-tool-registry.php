@@ -167,6 +167,11 @@ final class Fahad_AI_Tool_Registry {
 			$result = call_user_func( $tools[ $name ]['callback'], $input );
 			return is_array( $result ) ? $result : [];
 		} catch ( \Throwable $e ) {
+			// Make the swallowed failure observable (issue #299): fire an action carrying only the
+			// tool name and the throwable (never the input, which may hold PII) so error-monitoring
+			// or logging can catch a real bug instead of it silently degrading the shopper's answer.
+			do_action( 'fahad_ai_tool_error', $name, $e );
+
 			return [
 				'error' => sprintf(
 					/* translators: %s: name of the tool that failed */

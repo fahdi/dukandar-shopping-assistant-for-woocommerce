@@ -48,6 +48,7 @@ class ToolRegistryTest extends TestCase {
         Functions\stubs( [
             'absint'              => fn( $n ) => abs( (int) $n ),
             'sanitize_text_field' => fn( $s ) => $s,
+            'do_action'           => fn( ...$args ) => null,
             // get_tools() reads the merchant tool-gating option (issue #56); default
             // (no disabled tools) so these built-in-contract tests are unaffected.
             'get_option'          => fn( $key, $default = '' ) => $default,
@@ -145,6 +146,39 @@ class ToolRegistryTest extends TestCase {
     }
 
     // ── error isolation ─────────────────────────────────────────────────────
+
+    public function test_dispatch_fires_tool_error_action_on_throw(): void {
+        // A throwing tool must be made observable via the fahad_ai_tool_error action (the tool
+        // name + throwable, never the input) so a real bug is not silently swallowed.
+        $seen = null;
+        Functions\when( 'do_action' )->alias( function ( $hook, ...$args ) use ( &$seen ) {
+            if ( 'fahad_ai_tool_error' === $hook ) {
+                $seen = $args; // [ $name, $throwable ]
+            }
+        } );
+        Functions\when( 'apply_filters' )->alias( function ( $hook, $tools ) {
+            if ( 'fahad_ai_register_tools' === $hook ) {
+                $tools[] = [
+                    'name'        => 'boom',
+                    'description' => 'Always explodes.',
+                    'parameters'  => [ 'type' => 'object', 'properties' => new stdClass() ],
+                    'callback'    => function ( array $input ): array {
+                        throw new \RuntimeException( 'kaboom' );
+                    },
+                ];
+            }
+            return $tools;
+        } );
+
+        $result = $this->registry()->dispatch( 'boom', [ 'secret' => 'do-not-leak' ] );
+
+        $this->assertArrayHasKey( 'error', $result );
+        $this->assertIsArray( $seen, 'fahad_ai_tool_error must fire on a throw' );
+        $this->assertSame( 'boom', $seen[0] );
+        $this->assertInstanceOf( \Throwable::class, $seen[1] );
+        // The input (which may hold PII) must not be part of the event payload.
+        $this->assertNotContains( 'do-not-leak', array_map( 'strval', array_filter( $seen, 'is_scalar' ) ) );
+    }
 
     public function test_dispatch_isolates_a_throwing_callback(): void {
         // A third-party tool whose callback throws must NOT bubble the exception
