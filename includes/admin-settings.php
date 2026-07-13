@@ -269,6 +269,54 @@ function fahad_ai_review_notice(): void {
 }
 
 /**
+ * Whether month-to-date AI spend has reached the owner's monthly budget (issue #243). Pure:
+ * true only when a budget is set (> 0) and spend is at or above it. The caller supplies the
+ * spend so this stays trivially testable.
+ */
+function fahad_ai_monthly_budget_exceeded( float $budget, float $mtd_cost ): bool {
+	return $budget > 0 && $mtd_cost >= $budget;
+}
+
+/**
+ * Monthly-budget over-spend warning (issue #243). Owners budget in monthly dollars, so warn
+ * the moment this calendar month's AI spend reaches the configured budget, before the
+ * provider invoice does. Self-resets each month (the window starts at the first). Silent when
+ * no budget is set or spend is under it. Reads recorded cost, so it is best-effort when
+ * analytics logging is off.
+ */
+function fahad_ai_budget_notice(): void {
+	if ( ! current_user_can( fahad_ai_settings_capability() ) ) {
+		return;
+	}
+	$budget = (float) get_option( 'fahad_ai_monthly_budget', 0 );
+	if ( $budget <= 0 ) {
+		return;
+	}
+	$month_start = (int) strtotime( gmdate( 'Y-m-01 00:00:00' ) );
+	$mtd         = Fahad_AI_Analytics::instance()->cost_summary( [ 'from' => $month_start ] );
+	$spent       = (float) $mtd['total_cost'];
+	if ( ! fahad_ai_monthly_budget_exceeded( $budget, $spent ) ) {
+		return;
+	}
+	$symbol   = function_exists( 'get_woocommerce_currency_symbol' ) ? get_woocommerce_currency_symbol() : '';
+	$settings = admin_url( 'options-general.php?page=fahad-ai-shopping-assistant-for-woocommerce' );
+	printf(
+		'<div class="notice notice-warning"><p><strong>%s</strong> %s <a href="%s" class="button" style="margin-left:8px">%s</a></p></div>',
+		esc_html(
+			sprintf(
+				/* translators: 1: month-to-date spend, 2: monthly budget, both currency-formatted. */
+				esc_html__( 'This month the assistant has spent %1$s, over your %2$s budget.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+				$symbol . number_format( $spent, 2 ),
+				$symbol . number_format( $budget, 2 )
+			)
+		),
+		esc_html__( 'Raise the budget, lower the daily message limit, or pause the assistant to control spend.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+		esc_url( $settings ),
+		esc_html__( 'Review settings', 'fahad-ai-shopping-assistant-for-woocommerce' )
+	);
+}
+
+/**
  * Provider-health warning (issue #200): when the assistant has hit a cluster of failed
  * responses in the last 24 hours, warn the owner that their AI provider is likely
  * misconfigured (wrong, expired, or credit-exhausted key). Left unnoticed this is the
@@ -872,6 +920,7 @@ function fahad_ai_settings_page(): void {
 		// Cost / model knobs (issue #23, surfaced for #56).
 		update_option( 'fahad_ai_token_budget',        absint( $_POST['token_budget'] ?? 0 ) );
 		update_option( 'fahad_ai_daily_message_cap',   absint( $_POST['daily_message_cap'] ?? 0 ) );
+		update_option( 'fahad_ai_monthly_budget',      max( 0, (float) ( $_POST['monthly_budget'] ?? 0 ) ) );
 		update_option( 'fahad_ai_fast_model_routing',  empty( $_POST['fast_model_routing'] ) ? 0 : 1 );
 		update_option( 'fahad_ai_fast_model',          sanitize_text_field( wp_unslash( $_POST['fast_model'] ?? '' ) ) );
 
@@ -928,6 +977,7 @@ function fahad_ai_settings_page(): void {
 	$disabled_tools     = (array) get_option( 'fahad_ai_disabled_tools', [] );
 	$token_budget       = (int) get_option( 'fahad_ai_token_budget',   0 );
 	$daily_message_cap  = (int) get_option( 'fahad_ai_daily_message_cap', 0 );
+	$monthly_budget     = (float) get_option( 'fahad_ai_monthly_budget', 0 );
 
 	// Month-to-date AI spend (issue #235): read-only context shown next to the cost limits so
 	// the owner sets the token budget / daily cap against what they are actually spending.
@@ -1357,6 +1407,16 @@ function fahad_ai_settings_page(): void {
 							value="<?php echo esc_attr( (string) $daily_message_cap ); ?>" class="small-text">
 						<p class="description">
 							<?php esc_html_e( 'Maximum AI answers the whole store will serve per day, to keep costs predictable. When reached, shoppers are pointed to human support instead of making more billable calls; the count resets each day. 0 = unlimited.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="monthly_budget"><?php esc_html_e( 'Monthly Budget', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
+					<td>
+						<input type="number" id="monthly_budget" name="monthly_budget" min="0" step="1"
+							value="<?php echo esc_attr( (string) $monthly_budget ); ?>" class="small-text">
+						<p class="description">
+							<?php esc_html_e( 'A monthly AI spend budget, in your store currency. When this calendar month\'s spend reaches it, you get an admin warning so there are no surprises on the provider invoice. 0 = no budget.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
 						</p>
 					</td>
 				</tr>

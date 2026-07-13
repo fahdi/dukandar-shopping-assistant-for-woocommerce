@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.31
+Stable tag: 2.14.32
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.32 =
+No more invoice surprises: set a monthly AI budget and get warned when you reach it.
+
+* Added a "Monthly Budget" setting. When this calendar month's AI spend reaches the amount you set, the admin shows a warning so you can react (raise the budget, lower the daily message limit, or pause) before the provider bill arrives. Resets automatically each month. 0 = no budget.
 
 = 2.14.31 =
 Distraction-free checkout: optionally hide the assistant on the cart and checkout pages.
@@ -598,6 +603,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.14.32 =
+Adds a Monthly Budget setting that warns you when this month's AI spend reaches it, before the provider invoice. No breaking changes.
 
 = 2.14.31 =
 Adds a Hide at Checkout option to keep the cart and checkout pages distraction-free. Off by default. No breaking changes.
