@@ -208,6 +208,20 @@ class ToolsTest extends TestCase {
         $this->assertSame( 1, $result['products'][0]['id'] );
     }
 
+    public function test_search_inverted_price_range_is_normalized_for_the_query(): void {
+        // "between $100 and $50" must reach WooCommerce as $50..$100, not an impossible range.
+        $captured = null;
+        Functions\when( 'wc_get_products' )->alias( function ( array $args ) use ( &$captured ) {
+            $captured = $args;
+            return [];
+        } );
+
+        $this->tools()->execute( 'search_products', [ 'query' => 'jacket', 'min_price' => 100, 'max_price' => 50 ] );
+
+        $this->assertSame( 50.0, $captured['min_price'] );
+        $this->assertSame( 100.0, $captured['max_price'] );
+    }
+
     public function test_search_negative_limit_does_not_fetch_unbounded_catalogue(): void {
         // A model-supplied limit of -1 must not reach the query as an unbounded fetch (-1 = all).
         $captured = null;
