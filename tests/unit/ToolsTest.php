@@ -247,9 +247,24 @@ class ToolsTest extends TestCase {
 
         $this->assertSame( 5, $result['id'] );
         $this->assertSame( 'Sneakers', $result['name'] );
-        foreach ( [ 'sku', 'in_stock', 'categories', 'url' ] as $key ) {
+        foreach ( [ 'sku', 'in_stock', 'categories', 'url', 'low_stock' ] as $key ) {
             $this->assertArrayHasKey( $key, $result );
         }
+        // qty 10 vs default threshold 2 => not low.
+        $this->assertFalse( $result['low_stock'] );
+    }
+
+    public function test_get_product_details_flags_low_stock_from_real_data(): void {
+        $product = $this->mockProduct( 5, 'Sneakers', '89.99' ); // stubbed stock qty is 10
+        Functions\when( 'wc_get_product' )->justReturn( $product );
+        // Raise the store low-stock threshold so the real quantity (10) counts as low.
+        Functions\when( 'get_option' )->alias(
+            fn( $k, $d = '' ) => 'woocommerce_notify_low_stock_amount' === $k ? 20 : $d
+        );
+
+        $result = $this->tools()->execute( 'get_product_details', [ 'product_id' => 5 ] );
+
+        $this->assertTrue( $result['low_stock'] );
     }
 
     public function test_get_product_details_returns_error_for_false_product(): void {

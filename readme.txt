@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.21
+Stable tag: 2.14.22
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.22 =
+Honest urgency: the assistant can now say "only a few left" when a product really is low in stock.
+
+* Product details now include a low-stock signal computed from your real WooCommerce stock levels and low-stock threshold. The assistant can use it to nudge genuine urgency ("only 2 left"), a strong and legitimate conversion lever, while staying true to its promise of never inventing or exaggerating scarcity.
 
 = 2.14.21 =
 Free-shipping nudge at the perfect moment: right after a shopper adds to cart.
@@ -548,6 +553,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.14.22 =
+Adds an honest low-stock signal from real WooCommerce data so the assistant can nudge genuine urgency, never fabricated. No breaking changes.
 
 = 2.14.21 =
 The assistant now shows free-shipping progress right after add-to-cart, the best moment to lift order value. No breaking changes.
