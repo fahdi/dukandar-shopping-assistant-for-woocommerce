@@ -872,6 +872,11 @@ function fahad_ai_settings_page(): void {
 	$disabled_tools     = (array) get_option( 'fahad_ai_disabled_tools', [] );
 	$token_budget       = (int) get_option( 'fahad_ai_token_budget',   0 );
 	$daily_message_cap  = (int) get_option( 'fahad_ai_daily_message_cap', 0 );
+
+	// Month-to-date AI spend (issue #235): read-only context shown next to the cost limits so
+	// the owner sets the token budget / daily cap against what they are actually spending.
+	$mtd_start   = (int) strtotime( gmdate( 'Y-m-01 00:00:00' ) );
+	$mtd_cost    = Fahad_AI_Analytics::instance()->cost_summary( [ 'from' => $mtd_start ] );
 	$fast_model_routing = (bool) get_option( 'fahad_ai_fast_model_routing', false );
 	$fast_model         = get_option( 'fahad_ai_fast_model',           '' );
 
@@ -1247,6 +1252,20 @@ function fahad_ai_settings_page(): void {
 
 			<h2 class="title"><?php esc_html_e( 'Cost &amp; Performance', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></h2>
 			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'AI Spend This Month', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></th>
+					<td>
+						<strong><?php echo esc_html( get_woocommerce_currency_symbol() . number_format( (float) $mtd_cost['total_cost'], 4 ) ); ?></strong>
+						<?php
+						printf(
+							/* translators: %d: number of conversations so far this month. */
+							' ' . esc_html__( 'across %d conversations so far this month.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+							(int) $mtd_cost['conversations']
+						);
+						?>
+						<p class="description"><?php esc_html_e( 'Set your token budget and daily cap below with this in mind. This is a running total for the current calendar month.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></p>
+					</td>
+				</tr>
 				<tr>
 					<th scope="row"><?php esc_html_e( 'Enable Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></th>
 					<td>

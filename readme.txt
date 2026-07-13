@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.27
+Stable tag: 2.14.28
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.28 =
+Set your limits with eyes open: the settings page now shows this month's AI spend.
+
+* The Cost &amp; Performance settings now show your month-to-date AI spend and conversation count, right above the token budget and daily cap. No more setting cost limits blind, you can see what you are actually spending as you set them.
 
 = 2.14.27 =
 Your shoppers' verdict: the analytics now show the helpfulness rate from thumbs up/down.
@@ -578,6 +583,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.14.28 =
+The settings page now shows month-to-date AI spend next to the cost limits. No breaking changes.
 
 = 2.14.27 =
 Adds a shopper helpfulness rate (from thumbs up/down) to the analytics. No breaking changes.
