@@ -3,7 +3,7 @@
  * Plugin Name: Dukandar AI Shopping Assistant for WooCommerce
  * Plugin URI:  https://github.com/fahdi/dukandar-shopping-assistant-for-woocommerce
  * Description: AI-powered shopping assistant for WooCommerce, answers questions and manages the cart using OpenAI, Claude, Gemini, Moonshot, and other major AI providers.
- * Version:           2.14.25
+ * Version:           2.14.26
  * Author:      Fahdi Murtaza
  * Author URI:  https://github.com/fahdi
  * License:     GPL v2 or later
@@ -19,7 +19,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FAHAD_AI_VERSION', '2.14.25' );
+define( 'FAHAD_AI_VERSION', '2.14.26' );
 define( 'FAHAD_AI_PATH', plugin_dir_path( __FILE__ ) );
 define( 'FAHAD_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -271,6 +271,17 @@ final class Fahad_AI_Chatbot {
 				'fahad_ai_invalid_nonce',
 				__( 'Invalid or expired security token. Please reload the page and try again.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
 				[ 'status' => 403 ]
+			);
+		}
+
+		// Soft pause (#231): when the owner has switched the assistant off, refuse chat
+		// requests even from a stale page that still has the widget loaded, so a pause is a
+		// real stop to AI calls, not just a hidden widget.
+		if ( ! fahad_ai_widget_enabled() ) {
+			return new WP_Error(
+				'fahad_ai_disabled',
+				__( 'The assistant is currently unavailable. Please try again later.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+				[ 'status' => 503 ]
 			);
 		}
 
@@ -542,7 +553,7 @@ final class Fahad_AI_Chatbot {
 	}
 
 	public function render_widget(): void {
-		if ( ! $this->has_api_key() ) {
+		if ( ! $this->has_api_key() || ! fahad_ai_widget_enabled() ) {
 			return;
 		}
 		echo '<div id="fahad-ai-chatbot-root"></div>';

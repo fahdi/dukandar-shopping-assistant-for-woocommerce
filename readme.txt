@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.25
+Stable tag: 2.14.26
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.26 =
+An off switch: pause the assistant in one click without deactivating the plugin.
+
+* Added an "Enable Assistant" toggle. Untick it to pause the assistant everywhere: the widget disappears and no AI calls are made, while every setting is kept. Handy for maintenance, testing a change, or instantly stopping costs, without the heavier step of deactivating the plugin.
 
 = 2.14.25 =
 A friendly welcome: confirm the assistant is live and get set up for success from day one.
@@ -568,6 +573,9 @@ Under the hood:
 * Optional custom system prompt
 
 == Upgrade Notice ==
+
+= 2.14.26 =
+Adds an Enable Assistant toggle to pause the assistant in one click without deactivating the plugin. No breaking changes.
 
 = 2.14.25 =
 Sends a one-time welcome email when you first connect a provider, confirming the assistant is live and guiding setup. No breaking changes.
