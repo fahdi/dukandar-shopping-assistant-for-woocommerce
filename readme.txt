@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.64
+Stable tag: 2.14.65
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.65 =
+No surprise tax: the checkout summary now shows the tax amount.
+
+* The order summary the assistant gives now includes the tax total from your real cart, so a shopper can see the tax before they check out instead of being surprised by it at the last step. The assistant mentions it only when there is tax to show; grounded in WooCommerce's own tax calculation.
 
 = 2.14.64 =
 Bestseller badge while browsing: the assistant can now point out best-sellers in a list of options.
@@ -520,6 +525,9 @@ Only recent releases are listed here to stay within the changelog length WordPre
 
 
 == Upgrade Notice ==
+
+= 2.14.65 =
+Adds the tax amount to the checkout summary so shoppers see tax before checkout instead of being surprised by it. No breaking changes.
 
 = 2.14.64 =
 Surfaces the grounded bestseller signal in product list results (opt-in via Bestseller Threshold) so the assistant can highlight best-sellers while listing options. No breaking changes.
