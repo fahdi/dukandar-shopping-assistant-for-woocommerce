@@ -233,6 +233,7 @@ class CoverageCheckoutToolsTest extends TestCase {
 			'applied'        => [ 'SAVE10', 'EXTRA' ],
 			'subtotal'       => '<span>$120.00</span>',
 			'discount_total' => '10.00',
+			'tax'            => '<span>$9.60</span>',
 			'total'          => '<span>$110.00</span>',
 		] );
 		Functions\when( 'WC' )->justReturn( $this->fakeWc( $cart ) );
@@ -251,6 +252,8 @@ class CoverageCheckoutToolsTest extends TestCase {
 		// Tags are stripped from the subtotal/total figures.
 		$this->assertSame( '$120.00', $snap['subtotal'] );
 		$this->assertSame( '$110.00', $snap['total'] );
+		// Tax is stripped of tags and surfaced from the real cart (issue #309).
+		$this->assertSame( '$9.60', $snap['tax_total'] );
 		// Real discount + first applied coupon are surfaced (never fabricated).
 		$this->assertSame( '10.00', $snap['discount_total'] );
 		$this->assertSame( 'SAVE10', $snap['applied_coupon'] );
@@ -545,6 +548,7 @@ class Fahad_AI_Checkout_Coverage_Fake_Cart extends WC_Cart {
 	public function get_cart_total(): string { return (string) ( $this->cfg['total'] ?? '' ); }
 	public function get_applied_coupons(): array { return (array) ( $this->cfg['applied'] ?? [] ); }
 	public function get_discount_total(): string { return (string) ( $this->cfg['discount_total'] ?? '0' ); }
+	public function get_cart_tax(): string { return (string) ( $this->cfg['tax'] ?? '0' ); }
 	public function needs_shipping(): bool { return (bool) ( $this->cfg['needs_shipping'] ?? true ); }
 	public function calculate_shipping(): void { $this->calcShippingCount++; }
 	public function calculate_totals(): void { $this->calcTotalsCount++; }

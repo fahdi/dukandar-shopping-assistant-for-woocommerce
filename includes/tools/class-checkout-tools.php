@@ -148,6 +148,9 @@ class Fahad_AI_Checkout_Tools {
 			'items'          => self::shape_items( $cart['items'] ?? [] ),
 			'subtotal'       => (string) ( $cart['subtotal'] ?? '' ),
 			'discount_total' => (string) ( $cart['discount_total'] ?? '0' ),
+			// Surface tax so the shopper is not surprised at checkout (issue #309); grounded in
+			// WooCommerce's own tax calculation. The assistant should mention it only when non-zero.
+			'tax_total'      => (string) ( $cart['tax_total'] ?? '0' ),
 			'total'          => (string) ( $cart['total'] ?? '' ),
 			// No coupon applied → an explicit null, never a fabricated code.
 			'applied_coupon' => isset( $cart['applied_coupon'] ) && '' !== (string) $cart['applied_coupon']
@@ -490,6 +493,7 @@ class Fahad_AI_Checkout_Tools {
 			'items'           => $items,
 			'subtotal'        => wp_strip_all_tags( (string) $cart->get_cart_subtotal() ),
 			'discount_total'  => method_exists( $cart, 'get_discount_total' ) ? (string) $cart->get_discount_total() : '0',
+			'tax_total'       => method_exists( $cart, 'get_cart_tax' ) ? wp_strip_all_tags( (string) $cart->get_cart_tax() ) : '0',
 			'total'           => wp_strip_all_tags( (string) $cart->get_cart_total() ),
 			'applied_coupon'  => $applied[0] ?? null,
 			'currency_symbol' => function_exists( 'get_woocommerce_currency_symbol' ) ? get_woocommerce_currency_symbol() : '',

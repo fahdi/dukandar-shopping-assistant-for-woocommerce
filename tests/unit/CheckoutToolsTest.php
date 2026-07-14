@@ -81,6 +81,7 @@ class CheckoutToolsTest extends TestCase {
 			],
 			'subtotal'        => '40.00',
 			'discount_total'  => '0.00',
+			'tax_total'       => '0.00',
 			'total'           => '40.00',
 			'applied_coupon'  => null,
 			'currency_symbol' => '$',
@@ -211,6 +212,15 @@ class CheckoutToolsTest extends TestCase {
 
 		// Handoff URL present; PCI boundary asserted in its own test.
 		$this->assertSame( 'https://shop.test/checkout/', $result['checkout_url'] );
+	}
+
+	public function test_summary_surfaces_tax_from_the_real_cart(): void {
+		Fahad_AI_Checkout_Tools_Stub::$cart     = $this->cartSnapshot( [ 'tax_total' => '6.40' ] );
+		Fahad_AI_Checkout_Tools_Stub::$shipping = $this->shippingSnapshot( [], null, false );
+
+		$result = $this->dispatch( 'get_checkout_summary' );
+
+		$this->assertSame( '6.40', $result['tax_total'] );
 	}
 
 	public function test_summary_empty_cart_returns_empty_state_with_no_totals(): void {
