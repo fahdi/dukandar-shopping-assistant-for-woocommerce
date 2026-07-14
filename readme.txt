@@ -5,7 +5,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
 Requires Plugins: woocommerce
-Stable tag: 2.14.60
+Stable tag: 2.14.61
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -218,6 +218,11 @@ Used when the optional WhatsApp channel is enabled (off by default). The plugin 
 * [WhatsApp Business Terms of Service](https://www.whatsapp.com/legal/business-terms/) | [Meta Privacy Policy](https://www.facebook.com/privacy/policy/)
 
 == Changelog ==
+
+= 2.14.61 =
+Change your mind about a code: the assistant can now remove an applied coupon.
+
+* Adds coupon removal to the assistant. A shopper who applied the wrong discount code, or changed their mind, can now ask to remove it without leaving the chat, and the cart total updates. The assistant only confirms removal when the code was actually applied, so it never claims to remove a code you did not have.
 
 = 2.14.60 =
 Reliability: tool failures are no longer silent.
@@ -500,6 +505,9 @@ Only recent releases are listed here to stay within the changelog length WordPre
 
 
 == Upgrade Notice ==
+
+= 2.14.61 =
+Adds a remove-coupon capability so shoppers can undo an applied discount code in the chat. No breaking changes.
 
 = 2.14.60 =
 Makes unexpected tool failures observable (a new fahad_ai_tool_error event, logged under WP_DEBUG) so real bugs are diagnosable. No visible change for shoppers.
