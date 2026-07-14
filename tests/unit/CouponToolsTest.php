@@ -399,4 +399,62 @@ class CouponToolsTest extends TestCase {
 
         $this->assertTrue( $result['success'] );
     }
+
+    // ── remove_coupon ─────────────────────────────────────────────────────────
+
+    public function test_remove_coupon_is_registered_and_not_personal(): void {
+        $names = array_column( $this->registry()->specs(), 'name' );
+        $this->assertContains( 'remove_coupon', $names );
+
+        $map = ( new ReflectionMethod( Fahad_AI_Tool_Registry::class, 'get_tools' ) )->invoke( $this->registry() );
+        $this->assertArrayHasKey( 'remove_coupon', $map );
+        $this->assertEmpty( $map['remove_coupon']['personal'] ?? null );
+    }
+
+    public function test_remove_coupon_removes_an_applied_code(): void {
+        // WooCommerce stores applied codes lowercased; a case-different request still matches.
+        $cart = Mockery::mock( WC_Cart::class );
+        $cart->shouldReceive( 'get_applied_coupons' )->andReturn( [ 'save10' ] );
+        $cart->shouldReceive( 'remove_coupon' )->with( 'SAVE10' )->once()->andReturn( true );
+        $cart->shouldReceive( 'get_cart_total' )->andReturn( '$50.00' );
+        Functions\when( 'WC' )->justReturn( (object) [ 'cart' => $cart ] );
+
+        $result = $this->registry()->dispatch( 'remove_coupon', [ 'code' => 'SAVE10' ] );
+
+        $this->assertTrue( $result['success'] );
+        $this->assertStringContainsString( 'SAVE10', $result['message'] );
+        $this->assertSame( '$50.00', $result['cart_total'] );
+    }
+
+    public function test_remove_coupon_errors_when_code_not_applied(): void {
+        // Must not claim removal of a code the cart never had.
+        $cart = Mockery::mock( WC_Cart::class );
+        $cart->shouldReceive( 'get_applied_coupons' )->andReturn( [] );
+        $cart->shouldNotReceive( 'remove_coupon' );
+        Functions\when( 'WC' )->justReturn( (object) [ 'cart' => $cart ] );
+
+        $result = $this->registry()->dispatch( 'remove_coupon', [ 'code' => 'GHOST' ] );
+
+        $this->assertFalse( $result['success'] );
+        $this->assertArrayHasKey( 'error', $result );
+        $this->assertArrayNotHasKey( 'cart_total', $result );
+    }
+
+    public function test_remove_coupon_requires_a_code(): void {
+        Functions\when( 'WC' )->justReturn( (object) [ 'cart' => Mockery::mock( WC_Cart::class ) ] );
+
+        $result = $this->registry()->dispatch( 'remove_coupon', [] );
+
+        $this->assertFalse( $result['success'] );
+        $this->assertArrayHasKey( 'error', $result );
+    }
+
+    public function test_remove_coupon_errors_when_cart_is_null(): void {
+        Functions\when( 'WC' )->justReturn( (object) [ 'cart' => null ] );
+
+        $result = $this->registry()->dispatch( 'remove_coupon', [ 'code' => 'SAVE10' ] );
+
+        $this->assertFalse( $result['success'] );
+        $this->assertArrayNotHasKey( 'cart_total', $result );
+    }
 }

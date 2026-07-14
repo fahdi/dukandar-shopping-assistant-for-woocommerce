@@ -73,6 +73,19 @@ final class Fahad_AI_Coupon_Tools {
 			'callback'    => fn( array $input ) => self::apply_coupon( $input ),
 		];
 
+		$tools[] = [
+			'name'        => 'remove_coupon',
+			'description' => "Remove a discount code the customer previously applied to their cart. Pass the exact code. Returns the updated cart total on success, or a clear error if the code is not currently applied. Use this when the customer wants to undo, cancel, or change a coupon they already applied.",
+			'parameters'  => [
+				'type'       => 'object',
+				'properties' => [
+					'code' => [ 'type' => 'string', 'description' => 'The coupon / discount code to remove.' ],
+				],
+				'required'   => [ 'code' ],
+			],
+			'callback'    => fn( array $input ) => self::remove_coupon( $input ),
+		];
+
 		return $tools;
 	}
 
@@ -186,6 +199,55 @@ final class Fahad_AI_Coupon_Tools {
 		}
 
 		return $response;
+	}
+
+	/**
+	 * Remove a previously-applied coupon from the session cart (issue #301), the undo half of
+	 * apply_coupon. Only claims removal when the code is genuinely applied (matched
+	 * case-insensitively, since WooCommerce stores applied codes lowercased), so the assistant
+	 * never tells a shopper it removed a code their cart never had.
+	 */
+	private static function remove_coupon( array $input ): array {
+		$code = isset( $input['code'] ) ? sanitize_text_field( (string) $input['code'] ) : '';
+
+		if ( '' === $code ) {
+			return [
+				'success' => false,
+				'error'   => __( 'A coupon code is required.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+			];
+		}
+
+		$cart = self::cart();
+		if ( ! $cart ) {
+			return [
+				'success' => false,
+				'error'   => __( 'The cart is not available right now.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+			];
+		}
+
+		$applied = array_map( 'strtolower', (array) $cart->get_applied_coupons() );
+		if ( ! in_array( strtolower( $code ), $applied, true ) ) {
+			return [
+				'success' => false,
+				'error'   => sprintf(
+					/* translators: %s: the coupon code the customer tried to remove */
+					__( 'The code "%s" is not applied to your cart, so there is nothing to remove.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+					$code
+				),
+			];
+		}
+
+		$cart->remove_coupon( $code );
+
+		return [
+			'success'    => true,
+			'message'    => sprintf(
+				/* translators: %s: the coupon code that was removed */
+				__( 'Removed coupon %s from your cart.', 'fahad-ai-shopping-assistant-for-woocommerce' ),
+				$code
+			),
+			'cart_total' => wp_strip_all_tags( (string) $cart->get_cart_total() ),
+		];
 	}
 
 	/**
