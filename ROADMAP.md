@@ -1,4 +1,4 @@
-# Fahad AI Shopping Assistant, Product Roadmap
+# Dukandar - Shopping Assistant, Product Roadmap
 
 > Working document. The thesis: **an assistant earns conversion by being a trustworthy advisor, not by nudging harder.** Everything below is judged against that.
 
