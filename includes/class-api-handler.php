@@ -9,6 +9,17 @@ final class Fahad_AI_API_Handler {
 
 	private static $instance = null;
 
+	/**
+	 * Server-side transcript ceilings (issue #325). The widget sends the WHOLE
+	 * conversation on every turn and the agent loop makes up to 8 billable provider
+	 * calls per request, so what the client is allowed to hand us must be bounded
+	 * here, independent of any client-side pruning. Each is filterable:
+	 * fahad_ai_max_messages / fahad_ai_max_message_chars / fahad_ai_max_transcript_bytes.
+	 */
+	public const MAX_MESSAGES         = 40;
+	public const MAX_MESSAGE_CHARS    = 4000;
+	public const MAX_TRANSCRIPT_BYTES = 65536;
+
 	public static function instance(): self {
 		if ( null === self::$instance ) {
 			self::$instance = new self();
@@ -1863,7 +1874,57 @@ Writing style, follow exactly:
 			$out[] = $msg;
 		}
 
-		return $out;
+		return $this->bound_transcript( $out );
+	}
+
+	/**
+	 * Enforce the transcript ceilings (issue #325): keep only the newest
+	 * MAX_MESSAGES, truncate any plain-string content to MAX_MESSAGE_CHARS, then drop
+	 * the oldest turns until the serialized transcript fits MAX_TRANSCRIPT_BYTES.
+	 * Whenever a trim happened, the remainder is re-aligned to open on a genuine
+	 * (plain-string) user turn so a provider never sees an orphaned tool_result /
+	 * tool message with no preceding tool call. An empty result makes the endpoint
+	 * return its existing "No valid messages" 400.
+	 *
+	 * @param array $messages Role-filtered, string-sanitized messages.
+	 * @return array The bounded transcript (list, re-indexed).
+	 */
+	private function bound_transcript( array $messages ): array {
+		$max_messages = max( 1, (int) apply_filters( 'fahad_ai_max_messages', self::MAX_MESSAGES ) );
+		$max_chars    = max( 1, (int) apply_filters( 'fahad_ai_max_message_chars', self::MAX_MESSAGE_CHARS ) );
+		$max_bytes    = max( 1, (int) apply_filters( 'fahad_ai_max_transcript_bytes', self::MAX_TRANSCRIPT_BYTES ) );
+
+		$trimmed = false;
+
+		if ( count( $messages ) > $max_messages ) {
+			$messages = array_slice( $messages, -$max_messages );
+			$trimmed  = true;
+		}
+
+		foreach ( $messages as &$msg ) {
+			if ( is_string( $msg['content'] ?? null ) && mb_strlen( $msg['content'] ) > $max_chars ) {
+				$msg['content'] = mb_substr( $msg['content'], 0, $max_chars );
+			}
+		}
+		unset( $msg );
+
+		while ( ! empty( $messages ) && strlen( (string) wp_json_encode( $messages ) ) > $max_bytes ) {
+			array_shift( $messages );
+			$trimmed = true;
+		}
+
+		if ( $trimmed ) {
+			while ( ! empty( $messages ) && ! $this->is_plain_user_turn( $messages[0] ) ) {
+				array_shift( $messages );
+			}
+		}
+
+		return array_values( $messages );
+	}
+
+	/** A genuine human turn: role user with plain-string content (not a tool_result block). */
+	private function is_plain_user_turn( array $msg ): bool {
+		return ( $msg['role'] ?? '' ) === 'user' && is_string( $msg['content'] ?? null );
 	}
 
 	// =========================================================================

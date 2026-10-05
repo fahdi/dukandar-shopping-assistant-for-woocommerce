@@ -456,6 +456,121 @@ class ApiHandlerTest extends TestCase {
 
     // ── sanitize_messages ─────────────────────────────────────────────────────
 
+    // ── transcript size caps (issue #325, cost abuse) ─────────────────────────
+    // A client can send ANY messages array; the server must bound what reaches the
+    // (billable) provider regardless of what the widget does.
+
+    /** Route apply_filters so the three cap filters can be overridden per test. */
+    private function stubCapFilters( array $overrides = [] ): void {
+        Functions\when( 'wp_json_encode' )->alias( static fn( $d ) => json_encode( $d ) );
+        Functions\when( 'sanitize_textarea_field' )->returnArg();
+        Functions\when( 'apply_filters' )->alias(
+            static fn( $tag, $value = null ) => $overrides[ $tag ] ?? $value
+        );
+    }
+
+    public function test_transcript_is_capped_to_max_messages_keeping_the_newest(): void {
+        $this->stubCapFilters();
+
+        $messages = [];
+        for ( $i = 0; $i < 60; $i++ ) {
+            $messages[] = [ 'role' => 'user', 'content' => 'm' . $i ];
+        }
+
+        $result = $this->handler()->sanitize_messages( $messages );
+
+        $this->assertCount( Fahad_AI_API_Handler::MAX_MESSAGES, $result );
+        $this->assertSame( 'm59', end( $result )['content'] );
+        $this->assertSame( 'm' . ( 60 - Fahad_AI_API_Handler::MAX_MESSAGES ), $result[0]['content'] );
+    }
+
+    public function test_max_messages_is_filterable(): void {
+        $this->stubCapFilters( [ 'fahad_ai_max_messages' => 2 ] );
+
+        $result = $this->handler()->sanitize_messages( [
+            [ 'role' => 'user',      'content' => 'one' ],
+            [ 'role' => 'assistant', 'content' => 'two' ],
+            [ 'role' => 'user',      'content' => 'three' ],
+        ] );
+
+        // Sliced to the last two, then aligned to start on a genuine user turn.
+        $this->assertSame( [ [ 'role' => 'user', 'content' => 'three' ] ], $result );
+    }
+
+    public function test_long_string_content_is_truncated_to_max_chars(): void {
+        $this->stubCapFilters();
+
+        $result = $this->handler()->sanitize_messages( [
+            [ 'role' => 'user', 'content' => str_repeat( 'a', Fahad_AI_API_Handler::MAX_MESSAGE_CHARS + 5000 ) ],
+        ] );
+
+        $this->assertSame( Fahad_AI_API_Handler::MAX_MESSAGE_CHARS, mb_strlen( $result[0]['content'] ) );
+    }
+
+    public function test_max_message_chars_is_filterable_and_multibyte_safe(): void {
+        $this->stubCapFilters( [ 'fahad_ai_max_message_chars' => 3 ] );
+
+        $result = $this->handler()->sanitize_messages( [
+            [ 'role' => 'user', 'content' => 'héllo' ],
+        ] );
+
+        $this->assertSame( 'hél', $result[0]['content'] );
+    }
+
+    public function test_oversized_transcript_drops_oldest_turns_until_within_byte_budget(): void {
+        $this->stubCapFilters( [ 'fahad_ai_max_transcript_bytes' => 120 ] );
+
+        $result = $this->handler()->sanitize_messages( [
+            [ 'role' => 'user',      'content' => str_repeat( 'x', 40 ) ],
+            [ 'role' => 'assistant', 'content' => str_repeat( 'y', 40 ) ],
+            [ 'role' => 'user',      'content' => 'latest' ],
+        ] );
+
+        $this->assertLessThanOrEqual( 120, strlen( json_encode( $result ) ) );
+        $this->assertSame( 'latest', end( $result )['content'] );
+        $this->assertSame( 'user', $result[0]['role'], 'a trimmed transcript must open on a user turn' );
+    }
+
+    public function test_single_message_over_the_byte_budget_yields_an_empty_transcript(): void {
+        $this->stubCapFilters( [ 'fahad_ai_max_transcript_bytes' => 50 ] );
+
+        // Structured content cannot be truncated, so an oversized block is dropped
+        // entirely and the endpoint returns its existing "No valid messages" 400.
+        $result = $this->handler()->sanitize_messages( [
+            [ 'role' => 'user', 'content' => [ [ 'type' => 'tool_result', 'tool_use_id' => 'x', 'content' => str_repeat( 'z', 200 ) ] ] ],
+        ] );
+
+        $this->assertSame( [], $result );
+    }
+
+    public function test_trimmed_transcript_never_opens_on_an_orphaned_tool_block(): void {
+        $this->stubCapFilters( [ 'fahad_ai_max_messages' => 3 ] );
+
+        $result = $this->handler()->sanitize_messages( [
+            [ 'role' => 'user',      'content' => 'first' ],
+            [ 'role' => 'assistant', 'content' => [ [ 'type' => 'tool_use', 'id' => 't1', 'name' => 'search_products', 'input' => [] ] ] ],
+            [ 'role' => 'user',      'content' => [ [ 'type' => 'tool_result', 'tool_use_id' => 't1', 'content' => '{}' ] ] ],
+            [ 'role' => 'assistant', 'content' => 'found it' ],
+            [ 'role' => 'user',      'content' => 'thanks' ],
+        ] );
+
+        // The 3-message slice would open on the orphaned tool_result; alignment
+        // drops forward to the next genuine (string) user turn.
+        $this->assertSame( [ [ 'role' => 'user', 'content' => 'thanks' ] ], $result );
+    }
+
+    public function test_transcript_within_all_caps_is_untouched(): void {
+        $this->stubCapFilters();
+
+        $input = [
+            [ 'role' => 'assistant', 'content' => 'hi' ],
+            [ 'role' => 'user',      'content' => 'ok' ],
+        ];
+
+        $this->assertSame( $input, $this->handler()->sanitize_messages( $input ) );
+    }
+
+
     public function test_user_role_is_allowed(): void {
         Functions\when( 'sanitize_textarea_field' )->returnArg();
 
