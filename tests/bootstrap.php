@@ -14,6 +14,13 @@ if ( '-1' !== $fahad_ai_mem && (int) $fahad_ai_mem < 512 ) {
 require_once dirname( __DIR__ ) . '/vendor/autoload.php';
 require_once __DIR__ . '/stubs/wc-stubs.php';
 
+// Provider transport retry (issue #320): never wait between attempts under test. The
+// policy (what is retried, how long the wait would be) is covered by ProviderRetryTest
+// through the pure helpers; the sleep itself is a hard-coded no-op here.
+if ( ! defined( 'FAHAD_AI_HTTP_RETRY_DELAY' ) ) {
+	define( 'FAHAD_AI_HTTP_RETRY_DELAY', 0 );
+}
+
 // Load the plugin classes (no WordPress bootstrap needed for unit tests).
 require_once dirname( __DIR__ ) . '/includes/class-auth.php';
 require_once dirname( __DIR__ ) . '/includes/class-providers.php';

@@ -1997,7 +1997,7 @@ class ApiHandlerTest extends TestCase {
             'fahad_ai_moonshot_api_key'  => 'sk-moon',
         ] );
         Functions\when( 'sanitize_textarea_field' )->returnArg();
-        Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => $value );
+        Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => 'fahad_ai_http_retry_delay' === $hook ? 0 : $value );
         $this->stub_rest_ensure_response();
 
         $counter = $this->route_transport(
@@ -2011,7 +2011,9 @@ class ApiHandlerTest extends TestCase {
 
         $this->assertSame( 'anthropic to the rescue', $result['message'] );
         $this->assertArrayNotHasKey( 'degraded', $result, 'A successful fallback is not degraded.' );
-        $this->assertSame( 1, $counter['moonshot'], 'primary tried once' );
+        // A 429 is transient, so the transport retries it ONCE (issue #320) before the
+        // chain fails over; the fallback provider is still tried exactly once.
+        $this->assertSame( 2, $counter['moonshot'], 'primary tried once, retried once on the transient 429' );
         $this->assertSame( 1, $counter['anthropic'], 'fallback tried once' );
     }
 
@@ -2025,7 +2027,7 @@ class ApiHandlerTest extends TestCase {
             'fahad_ai_moonshot_api_key'  => 'sk-moon-SECRET',
         ] );
         Functions\when( 'sanitize_textarea_field' )->returnArg();
-        Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => $value );
+        Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => 'fahad_ai_http_retry_delay' === $hook ? 0 : $value );
         $this->stub_rest_ensure_response();
 
         $counter = $this->route_transport(
@@ -2044,9 +2046,10 @@ class ApiHandlerTest extends TestCase {
         $this->assertStringNotContainsString( 'SECRET', $result['message'] );
         $this->assertArrayNotHasKey( 'error', $result );
 
-        // Bounded: at most one attempt per provider, no loop.
-        $this->assertSame( 1, $counter['moonshot'] );
-        $this->assertSame( 1, $counter['anthropic'] );
+        // Bounded: one attempt plus ONE retry of the transient 502 per provider (issue
+        // #320), never a loop; cost stays bounded at 2 calls per provider.
+        $this->assertSame( 2, $counter['moonshot'] );
+        $this->assertSame( 2, $counter['anthropic'] );
     }
 
     public function test_handle_message_single_provider_path_is_unchanged_on_success(): void {
@@ -2528,7 +2531,8 @@ class ApiHandlerTest extends TestCase {
         ) );
 
         $this->assertSame( 'anthropic fallback', $result['message'] );
-        $this->assertSame( 1, $counts['openai'], 'primary (openai) tried once' );
+        // The transient 502 is retried once (issue #320) before the chain fails over.
+        $this->assertSame( 2, $counts['openai'], 'primary (openai) tried once, retried once on the 502' );
         $this->assertSame( 1, $counts['anthropic'], 'fallback (anthropic) tried once' );
     }
 
