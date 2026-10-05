@@ -124,6 +124,41 @@ final class Fahad_AI_Auth {
 	}
 
 	/**
+	 * Resolve what to store for a secret after a settings form submit (issue #329).
+	 *
+	 * The admin form never echoes a saved secret back, so a blank field means "keep
+	 * what is saved", not "wipe it"; an explicit clear flag is the only way to remove
+	 * a key. A non-empty submission replaces the stored value.
+	 *
+	 * @param string $posted  The sanitized submitted value ('' when left blank).
+	 * @param string $current The currently stored secret.
+	 * @param bool   $clear   Whether the "remove saved key" control was ticked.
+	 */
+	public static function resolve_secret( string $posted, string $current, bool $clear = false ): string {
+		if ( $clear ) {
+			return '';
+		}
+
+		return '' !== $posted ? $posted : $current;
+	}
+
+	/**
+	 * A non-reversible hint that a secret is set, for the admin form placeholder:
+	 * eight bullets plus the last four characters (`••••••••abcd`), or just the
+	 * bullets for a short secret. Empty input gives '' so the field shows its normal
+	 * "paste your key" placeholder. Never returns enough of the key to be useful.
+	 */
+	public static function secret_hint( string $secret ): string {
+		if ( '' === $secret ) {
+			return '';
+		}
+
+		$bullets = str_repeat( "\u{2022}", 8 );
+
+		return strlen( $secret ) >= 12 ? $bullets . substr( $secret, -4 ) : $bullets;
+	}
+
+	/**
 	 * The store-wide daily cap on billable AI answers (issues #194, #196). The base is the
 	 * owner-set 'Daily message limit' setting (0 = unlimited, the default); the
 	 * fahad_ai_daily_message_cap filter can still override it for code-level users. Negative

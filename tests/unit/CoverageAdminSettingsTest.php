@@ -652,6 +652,69 @@ class CoverageAdminSettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Track an order', $out );
 	}
 
+	// ── secrets are never echoed back; blank keeps, clear wipes (#329) ──────────
+
+	public function test_settings_page_never_echoes_saved_api_keys(): void {
+		$this->grant_cap( true );
+		$this->options['fahad_ai_anthropic_api_key']   = 'sk-ant-SECRET-VALUE-1234';
+		$this->options['fahad_ai_openai_api_key']      = 'sk-openai-SECRET-VALUE-5678';
+		$this->options['fahad_ai_whatsapp_app_secret'] = 'whatsapp-app-SECRET-9999';
+
+		ob_start();
+		fahad_ai_settings_page();
+		$out = ob_get_clean();
+
+		$this->assertStringNotContainsString( 'SECRET-VALUE', $out );
+		$this->assertStringNotContainsString( 'whatsapp-app-SECRET', $out );
+		$this->assertStringContainsString( str_repeat( "\u{2022}", 8 ) . '1234', $out, 'hint shows only the last four chars' );
+		$this->assertStringContainsString( 'name="anthropic_api_key_clear"', $out );
+		$this->assertStringContainsString( 'name="openai_api_key_clear"', $out );
+		$this->assertStringContainsString( 'name="whatsapp_app_secret_clear"', $out );
+		$this->assertStringNotContainsString( 'name="groq_api_key_clear"', $out, 'no clear control for a provider with no saved key' );
+	}
+
+	public function test_settings_save_keeps_saved_keys_when_fields_are_blank(): void {
+		$this->grant_cap( true );
+		Functions\when( 'check_admin_referer' )->justReturn( true );
+		$this->options['fahad_ai_anthropic_api_key']   = 'sk-keep';
+		$this->options['fahad_ai_openai_api_key']      = 'sk-openai-keep';
+		$this->options['fahad_ai_whatsapp_app_secret'] = 'wa-keep';
+
+		$_POST = [ 'fahad_ai_save' => '1', 'provider' => 'anthropic', 'anthropic_api_key' => '', 'whatsapp_app_secret' => '' ];
+
+		ob_start();
+		fahad_ai_settings_page();
+		ob_end_clean();
+
+		$this->assertSame( 'sk-keep', $this->options['fahad_ai_anthropic_api_key'] );
+		$this->assertSame( 'sk-openai-keep', $this->options['fahad_ai_openai_api_key'] );
+		$this->assertSame( 'wa-keep', $this->options['fahad_ai_whatsapp_app_secret'] );
+	}
+
+	public function test_settings_save_clears_a_key_only_via_the_explicit_control(): void {
+		$this->grant_cap( true );
+		Functions\when( 'check_admin_referer' )->justReturn( true );
+		$this->options['fahad_ai_anthropic_api_key']   = 'sk-old';
+		$this->options['fahad_ai_moonshot_api_key']    = 'moon-old';
+		$this->options['fahad_ai_whatsapp_app_secret'] = 'wa-old';
+
+		$_POST = [
+			'fahad_ai_save'             => '1',
+			'provider'                  => 'anthropic',
+			'anthropic_api_key_clear'   => '1',
+			'moonshot_api_key'          => 'moon-new',
+			'whatsapp_app_secret_clear' => '1',
+		];
+
+		ob_start();
+		fahad_ai_settings_page();
+		ob_end_clean();
+
+		$this->assertSame( '', $this->options['fahad_ai_anthropic_api_key'] );
+		$this->assertSame( 'moon-new', $this->options['fahad_ai_moonshot_api_key'], 'a pasted value replaces' );
+		$this->assertSame( '', $this->options['fahad_ai_whatsapp_app_secret'] );
+	}
+
 	// ── fahad_ai_settings_page (full save round-trip) ────────────────────────────
 
 	public function test_settings_page_saves_all_options(): void {
