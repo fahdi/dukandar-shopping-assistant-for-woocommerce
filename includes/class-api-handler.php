@@ -445,8 +445,8 @@ final class Fahad_AI_API_Handler {
 			'messages'   => $messages,
 		];
 
-		$response = wp_remote_post( 'https://api.anthropic.com/v1/messages', [
-			'timeout' => 30,
+		$response = $this->post_with_retry( 'https://api.anthropic.com/v1/messages', [
+			'timeout' => $this->http_timeout(),
 			'headers' => [
 				'x-api-key'         => $api_key,
 				'anthropic-version' => '2023-06-01',
@@ -614,8 +614,8 @@ final class Fahad_AI_API_Handler {
 			'tools'      => $tools,
 		];
 
-		$response = wp_remote_post( $this->openai_chat_url( $resolved['base_url'] ), [
-			'timeout' => 30,
+		$response = $this->post_with_retry( $this->openai_chat_url( $resolved['base_url'] ), [
+			'timeout' => $this->http_timeout(),
 			'headers' => [
 				'Authorization' => 'Bearer ' . $resolved['api_key'],
 				'Content-Type'  => 'application/json',
@@ -641,6 +641,115 @@ final class Fahad_AI_API_Handler {
 		}
 
 		return $body;
+	}
+
+	// =========================================================================
+	// Provider HTTP transport: timeout + bounded retry on transient failures (#320)
+	// =========================================================================
+
+	/** HTTP statuses that signal a transient provider condition worth one more try. */
+	public const RETRYABLE_STATUSES = [ 408, 429, 500, 502, 503, 504, 529 ];
+
+	/** Upper bound on any single retry wait, so a huge Retry-After cannot stall the turn. */
+	public const MAX_RETRY_DELAY = 3.0;
+
+	/**
+	 * Per-request timeout for the model call, filterable via `fahad_ai_http_timeout`
+	 * (seconds, default 30, floor 5).
+	 */
+	private function http_timeout(): int {
+		return max( 5, (int) apply_filters( 'fahad_ai_http_timeout', 30 ) );
+	}
+
+	/**
+	 * wp_remote_post with a bounded retry on TRANSIENT failures (issue #320).
+	 *
+	 * A single 429 / 5xx / 529-overloaded or a dropped connection used to end the
+	 * shopper's turn with the degraded message even though the very next request
+	 * would have succeeded. Retry at most `fahad_ai_http_retries` times (default 1,
+	 * max 3), waiting `Retry-After` when the provider sends one (capped at
+	 * MAX_RETRY_DELAY) or one second otherwise. Client errors (4xx other than
+	 * 408/429) and timeouts are never retried: a 400 will not change, and retrying a
+	 * timed-out call would double the wall-clock wait. The wait is filterable via
+	 * `fahad_ai_http_retry_delay`, or pinned with the FAHAD_AI_HTTP_RETRY_DELAY constant
+	 * (the test bootstrap sets it to 0 so no test ever sleeps).
+	 *
+	 * @param string $url  Endpoint.
+	 * @param array  $args wp_remote_post args.
+	 * @return array|WP_Error The final attempt's response.
+	 */
+	private function post_with_retry( string $url, array $args ) {
+		$retries  = max( 0, min( 3, (int) apply_filters( 'fahad_ai_http_retries', 1 ) ) );
+		$response = null;
+
+		for ( $attempt = 0; $attempt <= $retries; $attempt++ ) {
+			$response = wp_remote_post( $url, $args );
+
+			if ( $attempt === $retries || ! self::is_retryable_response( $response ) ) {
+				break;
+			}
+
+			// FAHAD_AI_HTTP_RETRY_DELAY (wp-config / test bootstrap) is a hard override of
+			// the wait; otherwise the computed wait goes through the filter.
+			$delay = defined( 'FAHAD_AI_HTTP_RETRY_DELAY' )
+				? (float) FAHAD_AI_HTTP_RETRY_DELAY
+				: (float) apply_filters(
+					'fahad_ai_http_retry_delay',
+					self::retry_delay_seconds( self::retry_after_header( $response ), $attempt ),
+					$attempt,
+					$response
+				);
+			if ( $delay > 0 ) {
+				usleep( (int) round( $delay * 1000000 ) );
+			}
+		}
+
+		return $response;
+	}
+
+	/**
+	 * Whether a wp_remote_post result is a transient failure worth retrying: a
+	 * transport WP_Error that is NOT a timeout, or a response whose status is in
+	 * RETRYABLE_STATUSES. Pure and public static so the policy is unit-testable.
+	 *
+	 * @param mixed $response wp_remote_post return value.
+	 */
+	public static function is_retryable_response( $response ): bool {
+		if ( is_wp_error( $response ) ) {
+			$message = strtolower( (string) $response->get_error_message() );
+			return false === strpos( $message, 'timed out' ) && false === strpos( $message, 'curl error 28' );
+		}
+		if ( ! is_array( $response ) ) {
+			return false;
+		}
+		return in_array( (int) wp_remote_retrieve_response_code( $response ), self::RETRYABLE_STATUSES, true );
+	}
+
+	/**
+	 * Seconds to wait before the next attempt: an integer Retry-After header when the
+	 * provider sent one, otherwise one second, both capped at MAX_RETRY_DELAY. Pure.
+	 *
+	 * @param mixed $retry_after Raw Retry-After header value (string|int|null).
+	 * @param int   $attempt     Zero-based index of the attempt that just failed.
+	 */
+	public static function retry_delay_seconds( $retry_after, int $attempt ): float {
+		$seconds = 1.0;
+		if ( null !== $retry_after && '' !== $retry_after && is_numeric( $retry_after ) ) {
+			$seconds = max( 0.0, (float) $retry_after );
+		}
+		return min( self::MAX_RETRY_DELAY, $seconds );
+	}
+
+	/** Read Retry-After from a wp_remote_post response array (array or ArrayAccess headers). */
+	public static function retry_after_header( $response ) {
+		if ( ! is_array( $response ) || ! isset( $response['headers'] ) ) {
+			return null;
+		}
+		$headers = $response['headers'];
+		if ( ( is_array( $headers ) || $headers instanceof ArrayAccess ) && isset( $headers['retry-after'] ) ) {
+			return $headers['retry-after'];
+		}
+		return null;
 	}
 
 	/**
