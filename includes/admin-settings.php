@@ -56,6 +56,16 @@ function fahad_ai_hide_on_checkout_enabled(): bool {
 }
 
 /**
+ * Whether ?fahad_demo= deep links may auto-send a question on page load (issue #330).
+ * Default OFF: with it on, anyone can embed the store in a hidden iframe (or spray a
+ * link) and make every visitor's browser spend the owner's AI budget. Owners who run a
+ * public demo store opt in explicitly.
+ */
+function fahad_ai_demo_links_enabled(): bool {
+	return (bool) get_option( 'fahad_ai_demo_links', '' );
+}
+
+/**
  * Render the WordPress dashboard widget (issue #245): the assistant's headline numbers on the
  * screen owners see on every login, last 7 days of conversations / chat-to-cart / resolution
  * plus this calendar month's AI spend, with a link to the full analytics. Reuses the existing
@@ -1088,6 +1098,7 @@ function fahad_ai_settings_page(): void {
 		update_option( 'fahad_ai_notification_email', sanitize_email( wp_unslash( $_POST['notification_email'] ?? '' ) ) );
 		update_option( 'fahad_ai_enabled', empty( $_POST['enabled'] ) ? 0 : 1 );
 		update_option( 'fahad_ai_hide_on_checkout', empty( $_POST['hide_on_checkout'] ) ? 0 : 1 );
+		update_option( 'fahad_ai_demo_links', empty( $_POST['demo_links'] ) ? 0 : 1 );
 		update_option( 'fahad_ai_disabled_tools', fahad_ai_sanitize_tool_list( array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['disabled_tools'] ?? [] ) ) ) );
 
 		// Multilingual: default/allowed languages (issue #61). Default 'auto' = detect and
@@ -1154,6 +1165,7 @@ function fahad_ai_settings_page(): void {
 	$notification_email = get_option( 'fahad_ai_notification_email', '' );
 	$assistant_enabled  = fahad_ai_widget_enabled();
 	$hide_on_checkout   = fahad_ai_hide_on_checkout_enabled();
+	$demo_links         = fahad_ai_demo_links_enabled();
 	$languages          = get_option( 'fahad_ai_languages',            'auto' ); // multilingual (#61)
 	$disabled_tools     = (array) get_option( 'fahad_ai_disabled_tools', [] );
 	$token_budget       = (int) get_option( 'fahad_ai_token_budget',   0 );
@@ -1588,6 +1600,15 @@ function fahad_ai_settings_page(): void {
 						<label>
 							<input type="checkbox" name="hide_on_checkout" value="1" <?php checked( $hide_on_checkout ); ?>>
 							<?php esc_html_e( 'Do not show the assistant on the cart and checkout pages, for a distraction-free checkout. It stays available everywhere else.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+						</label>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Demo Links', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="demo_links" value="1" <?php checked( $demo_links ); ?>>
+							<?php esc_html_e( 'Allow ?fahad_demo=question links to open the assistant and send the question automatically. Leave off unless you run a public demo: with it on, anyone can embed your store in a hidden frame and spend your AI budget from their visitors\' browsers.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
 						</label>
 					</td>
 				</tr>

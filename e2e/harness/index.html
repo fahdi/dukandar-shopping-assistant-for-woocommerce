@@ -40,6 +40,9 @@
 			cartUrl:     '/wp-json/fahad-ai/v1/cart',
 			feedbackUrl: '/wp-json/fahad-ai/v1/feedback',
 			nonce:       'test-nonce',
+			// Demo deep links are opt-in (#330); the harness opts in so demo.spec can
+			// exercise the happy path, and overrides it off for the gate tests.
+			demoLinks:   '1',
 			i18n:        {}
 		}, window.__FAHAD_CFG_OVERRIDE__ || {});
 	</script>

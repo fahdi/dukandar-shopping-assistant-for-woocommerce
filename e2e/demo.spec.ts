@@ -36,6 +36,26 @@ test.describe('live-demo deep link', () => {
 		await expect(page.locator('#chatbot-input')).toHaveValue('');
 	});
 
+	// ── Gate (#330): opt-in setting + top-level window only ──────────────────────
+
+	test('?fahad_demo= is ignored when the owner has not enabled demo links', async ({ page }) => {
+		await mockApi(page);
+		await page.addInitScript(() => { (window as any).__FAHAD_CFG_OVERRIDE__ = { demoLinks: '' }; });
+		await page.goto('/e2e/harness/?fahad_demo=Compare%20every%20product');
+		await page.waitForFunction(() => !!document.getElementById('chatbot-toggle'));
+		await expect(page.locator('#chatbot-panel')).toHaveClass(/chatbot-hidden/);
+		await expect(page.locator('#chatbot-messages')).not.toContainText('Compare every product');
+	});
+
+	test('?fahad_demo= is ignored inside a third-party iframe even when enabled', async ({ page }) => {
+		await mockApi(page);
+		await page.goto('/e2e/harness/framed.html');
+		const store = page.frameLocator('#store');
+		await store.locator('#chatbot-toggle').waitFor();
+		await expect(store.locator('#chatbot-panel')).toHaveClass(/chatbot-hidden/);
+		await expect(store.locator('#chatbot-messages')).not.toContainText('Compare every product');
+	});
+
 	test('no ?fahad_demo param leaves the widget closed', async ({ page }) => {
 		await mockApi(page);
 		await page.goto('/e2e/harness/');
