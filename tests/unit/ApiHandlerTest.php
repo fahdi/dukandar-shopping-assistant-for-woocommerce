@@ -1599,6 +1599,75 @@ class ApiHandlerTest extends TestCase {
         $this->assertSame( 'claude-opus-4-8', $captured['model'] );
     }
 
+    // ── Prompt caching on the Anthropic path (issue #318) ─────────────────────────
+    // The static prefix (tool definitions + system prompt) is identical on every call
+    // of the agent loop, so it carries an ephemeral cache breakpoint on the system
+    // block; the OpenAI-compatible path is untouched (those APIs cache prefixes
+    // automatically and reject the Anthropic field).
+
+    private function capture_anthropic_payload(): array {
+        $this->set_option_alias( [ 'fahad_ai_anthropic_api_key' => 'k' ] );
+        Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => $value );
+        Functions\when( 'wp_json_encode' )->alias( static fn( $d ) => json_encode( $d ) );
+
+        $captured = null;
+        Functions\when( 'wp_remote_post' )->alias(
+            static function ( $url, $args ) use ( &$captured ) {
+                $captured = json_decode( $args['body'], true );
+                return [ 'is_eval' => true ];
+            }
+        );
+        Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+        Functions\when( 'wp_remote_retrieve_body' )->justReturn( json_encode( [ 'stop_reason' => 'end_turn', 'content' => [] ] ) );
+
+        $method = new ReflectionMethod( Fahad_AI_API_Handler::class, 'call_anthropic' );
+        $method->invoke( $this->handler(), [ [ 'role' => 'user', 'content' => 'hi' ] ] );
+
+        return (array) $captured;
+    }
+
+    public function test_anthropic_system_prompt_is_sent_as_a_cached_block(): void {
+        $payload = $this->capture_anthropic_payload();
+
+        $this->assertIsArray( $payload['system'], 'system must be a content-block array, not a bare string' );
+        $this->assertCount( 1, $payload['system'] );
+        $this->assertSame( 'text', $payload['system'][0]['type'] );
+        $this->assertSame( [ 'type' => 'ephemeral' ], $payload['system'][0]['cache_control'] );
+    }
+
+    public function test_anthropic_cached_system_block_carries_the_full_prompt(): void {
+        // The breakpoint must sit on the REAL prompt (guardrails included), not on a
+        // placeholder, or the cache would key on the wrong bytes.
+        $payload = $this->capture_anthropic_payload();
+        $prompt  = ( new ReflectionMethod( Fahad_AI_API_Handler::class, 'get_system_prompt' ) )->invoke( $this->handler() );
+
+        $this->assertSame( $prompt, $payload['system'][0]['text'] );
+        $this->assertStringContainsString( 'scarcity', strtolower( $payload['system'][0]['text'] ) );
+    }
+
+    public function test_openai_payload_has_no_anthropic_cache_control(): void {
+        // OpenAI-compatible providers reject the field; their prefix caching is automatic.
+        $this->set_option_alias( [ 'fahad_ai_moonshot_api_key' => 'k', 'fahad_ai_moonshot_model' => 'kimi-k2.6' ] );
+        Functions\when( 'apply_filters' )->alias( static fn( $hook, $value = null ) => $value );
+        Functions\when( 'wp_json_encode' )->alias( static fn( $d ) => json_encode( $d ) );
+
+        $captured = null;
+        Functions\when( 'wp_remote_post' )->alias(
+            static function ( $url, $args ) use ( &$captured ) {
+                $captured = json_decode( $args['body'], true );
+                return [ 'is_eval' => true ];
+            }
+        );
+        Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+        Functions\when( 'wp_remote_retrieve_body' )->justReturn( json_encode( [ 'choices' => [] ] ) );
+
+        $method = new ReflectionMethod( Fahad_AI_API_Handler::class, 'call_openai' );
+        $method->invoke( $this->handler(), [ [ 'role' => 'system', 'content' => 'x' ], [ 'role' => 'user', 'content' => 'hi' ] ], 'moonshot' );
+
+        $this->assertArrayNotHasKey( 'system', $captured );
+        $this->assertStringNotContainsString( 'cache_control', json_encode( $captured ) );
+    }
+
     // ── prime_cart_session(), guest cart persistence over SSE (live-QA finding #31)
     // The streaming endpoint flushes the event-stream headers and then holds the
     // connection open, so WooCommerce never gets its shutdown chance to send the
