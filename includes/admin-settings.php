@@ -1022,6 +1022,33 @@ function fahad_ai_analytics_delete_handler(): void {
 	// @codeCoverageIgnoreEnd
 }
 
+/**
+ * Render a secret (API key / app secret) input WITHOUT echoing the saved value (#329).
+ *
+ * The field is always blank; when a secret is saved, the placeholder shows a
+ * non-reversible hint (bullets + last four characters) and a "remove saved key"
+ * checkbox named {name}_clear is offered. The save handler pairs this with
+ * Fahad_AI_Auth::resolve_secret(), so blank keeps, pasted replaces, ticked clears.
+ *
+ * @param string $id     The input id (also the label target).
+ * @param string $name   The POST field name.
+ * @param string $secret The currently stored secret ('' when none).
+ */
+function fahad_ai_secret_input( string $id, string $name, string $secret ): void {
+	$hint        = Fahad_AI_Auth::secret_hint( $secret );
+	$placeholder = '' !== $hint ? $hint : __( 'Paste your key', 'fahad-ai-shopping-assistant-for-woocommerce' );
+	?>
+	<input type="password" id="<?php echo esc_attr( $id ); ?>" name="<?php echo esc_attr( $name ); ?>"
+		value="" placeholder="<?php echo esc_attr( $placeholder ); ?>" class="regular-text" autocomplete="new-password">
+	<?php if ( '' !== $secret ) : ?>
+		<label style="margin-left:8px;">
+			<input type="checkbox" name="<?php echo esc_attr( $name . '_clear' ); ?>" value="1">
+			<?php esc_html_e( 'Remove saved key', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>
+		</label>
+		<p class="description"><?php esc_html_e( 'A key is saved. Leave blank to keep it, paste a new one to replace it.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></p>
+	<?php endif;
+}
+
 function fahad_ai_settings_page(): void {
 	if ( ! current_user_can( fahad_ai_settings_capability() ) ) {
 		return;
@@ -1053,10 +1080,16 @@ function fahad_ai_settings_page(): void {
 		// declared option names. anthropic/moonshot keep their existing option names
 		// (backward compat) because those ids already follow the convention. The model
 		// defaults to the preset default when the field is blank.
+		// Secrets are never echoed back into the form (#329), so a blank key field means
+		// "keep the saved key"; only the explicit {id}_api_key_clear box removes it.
 		foreach ( Fahad_AI_Providers::catalog() as $provider_id => $preset ) {
 			update_option(
 				$preset['key_option'],
-				sanitize_text_field( wp_unslash( $_POST[ $provider_id . '_api_key' ] ?? '' ) )
+				Fahad_AI_Auth::resolve_secret(
+					sanitize_text_field( wp_unslash( $_POST[ $provider_id . '_api_key' ] ?? '' ) ),
+					(string) get_option( $preset['key_option'], '' ),
+					! empty( $_POST[ $provider_id . '_api_key_clear' ] )
+				)
 			);
 
 			$model = sanitize_text_field( wp_unslash( $_POST[ $provider_id . '_model' ] ?? '' ) );
@@ -1121,7 +1154,14 @@ function fahad_ai_settings_page(): void {
 		// access tokens (held by that provider), which are intentionally out of core.
 		update_option( 'fahad_ai_whatsapp_enabled',      empty( $_POST['whatsapp_enabled'] ) ? 0 : 1 );
 		update_option( 'fahad_ai_whatsapp_verify_token', sanitize_text_field( wp_unslash( $_POST['whatsapp_verify_token'] ?? '' ) ) );
-		update_option( 'fahad_ai_whatsapp_app_secret',   sanitize_text_field( wp_unslash( $_POST['whatsapp_app_secret'] ?? '' ) ) );
+		update_option(
+			'fahad_ai_whatsapp_app_secret',
+			Fahad_AI_Auth::resolve_secret(
+				sanitize_text_field( wp_unslash( $_POST['whatsapp_app_secret'] ?? '' ) ),
+				(string) get_option( 'fahad_ai_whatsapp_app_secret', '' ),
+				! empty( $_POST['whatsapp_app_secret_clear'] )
+			)
+		);
 
 		// Semantic search settings (#108). Sanitization lives in the admin class.
 		Fahad_AI_Embeddings_Admin::save( wp_unslash( $_POST ) );
@@ -1232,8 +1272,7 @@ function fahad_ai_settings_page(): void {
 					<tr>
 						<th scope="row"><label for="anthropic_api_key"><?php esc_html_e( 'Anthropic API Key', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
 						<td>
-							<input type="password" id="anthropic_api_key" name="anthropic_api_key"
-								value="<?php echo esc_attr( $anthropic_key ); ?>" class="regular-text" autocomplete="new-password">
+							<?php fahad_ai_secret_input( 'anthropic_api_key', 'anthropic_api_key', (string) $anthropic_key ); ?>
 							<p class="description">
 								<?php
 								printf(
@@ -1280,8 +1319,7 @@ function fahad_ai_settings_page(): void {
 					<tr>
 						<th scope="row"><label for="moonshot_api_key"><?php esc_html_e( 'Moonshot API Key', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
 						<td>
-							<input type="password" id="moonshot_api_key" name="moonshot_api_key"
-								value="<?php echo esc_attr( $moonshot_key ); ?>" class="regular-text" autocomplete="new-password">
+							<?php fahad_ai_secret_input( 'moonshot_api_key', 'moonshot_api_key', (string) $moonshot_key ); ?>
 							<p class="description">
 								<?php
 								printf(
@@ -1357,8 +1395,7 @@ function fahad_ai_settings_page(): void {
 								</label>
 							</th>
 							<td>
-								<input type="password" id="<?php echo esc_attr( $pid_key ); ?>" name="<?php echo esc_attr( $pid_key ); ?>"
-									value="<?php echo esc_attr( $saved_key ); ?>" class="regular-text" autocomplete="new-password">
+								<?php fahad_ai_secret_input( $pid_key, $pid_key, $saved_key ); ?>
 								<?php if ( $is_local ) : ?>
 									<p class="description"><?php esc_html_e( 'A local Ollama server usually needs no key, leave blank unless your setup requires one.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></p>
 								<?php endif; ?>
@@ -1754,7 +1791,7 @@ function fahad_ai_settings_page(): void {
 				<tr>
 					<th scope="row"><label for="fahad_ai_whatsapp_app_secret"><?php esc_html_e( 'App Secret', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
 					<td>
-						<input type="password" id="fahad_ai_whatsapp_app_secret" name="whatsapp_app_secret" value="<?php echo esc_attr( $whatsapp_app_secret ); ?>" class="regular-text" autocomplete="off">
+						<?php fahad_ai_secret_input( 'fahad_ai_whatsapp_app_secret', 'whatsapp_app_secret', $whatsapp_app_secret ); ?>
 						<p class="description"><?php esc_html_e( 'Your Meta app secret. Used to verify the signature on each inbound message; never shared with the assistant or shown to shoppers.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></p>
 					</td>
 				</tr>

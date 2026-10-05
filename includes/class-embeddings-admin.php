@@ -51,12 +51,14 @@ final class Fahad_AI_Embeddings_Admin {
 		$base = sanitize_text_field( (string) ( $post['embedding_base_url'] ?? '' ) );
 		update_option( self::OPT_BASE_URL, '' !== $base ? $base : 'https://api.openai.com/v1' );
 
-		update_option( self::OPT_API_KEY, sanitize_text_field( (string) ( $post['embedding_api_key'] ?? '' ) ) );
-		update_option( self::OPT_COHERE_KEY, sanitize_text_field( (string) ( $post['cohere_api_key'] ?? '' ) ) );
+		// Secrets are never echoed back into the form (#329): blank keeps, pasted replaces,
+		// the {field}_clear box removes.
+		update_option( self::OPT_API_KEY, self::resolve_secret( $post, 'embedding_api_key', self::OPT_API_KEY ) );
+		update_option( self::OPT_COHERE_KEY, self::resolve_secret( $post, 'cohere_api_key', self::OPT_COHERE_KEY ) );
 
 		// External vector backend (Qdrant, #113), opt-in scale tier.
 		update_option( 'fahad_ai_qdrant_url', sanitize_text_field( (string) ( $post['qdrant_url'] ?? '' ) ) );
-		update_option( 'fahad_ai_qdrant_key', sanitize_text_field( (string) ( $post['qdrant_key'] ?? '' ) ) );
+		update_option( 'fahad_ai_qdrant_key', self::resolve_secret( $post, 'qdrant_key', 'fahad_ai_qdrant_key' ) );
 		$collection = sanitize_text_field( (string) ( $post['qdrant_collection'] ?? '' ) );
 		update_option( 'fahad_ai_qdrant_collection', '' !== $collection ? $collection : 'fahad_ai_products' );
 	}
@@ -82,6 +84,28 @@ final class Fahad_AI_Embeddings_Admin {
 		// Reason: admin-post handler terminates the request; exit would kill the PHPUnit process, so the redirect stub throws before it and this line cannot be measured in-process.
 		exit;
 		// @codeCoverageIgnoreEnd
+	}
+
+	/**
+	 * Resolve a submitted secret against the stored one (#329): blank keeps the saved
+	 * value, a pasted value replaces it, and {field}_clear removes it.
+	 */
+	private static function resolve_secret( array $post, string $field, string $option ): string {
+		return Fahad_AI_Auth::resolve_secret(
+			sanitize_text_field( (string) ( $post[ $field ] ?? '' ) ),
+			(string) get_option( $option, '' ),
+			! empty( $post[ $field . '_clear' ] )
+		);
+	}
+
+	/** Render a blank secret input whose placeholder only hints that a key is saved (#329). */
+	private static function secret_input( string $name, string $secret, string $empty_placeholder ): void {
+		$hint = Fahad_AI_Auth::secret_hint( $secret );
+		?>
+		<input type="password" id="<?php echo esc_attr( $name ); ?>" name="<?php echo esc_attr( $name ); ?>" value="" placeholder="<?php echo esc_attr( '' !== $hint ? $hint : $empty_placeholder ); ?>" class="regular-text" autocomplete="new-password">
+		<?php if ( '' !== $secret ) : ?>
+			<label style="margin-left:8px;"><input type="checkbox" name="<?php echo esc_attr( $name . '_clear' ); ?>" value="1"> <?php esc_html_e( 'Remove saved key', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label>
+		<?php endif;
 	}
 
 	/**
@@ -197,13 +221,13 @@ final class Fahad_AI_Embeddings_Admin {
 			<tr>
 				<th scope="row"><label for="embedding_api_key"><?php esc_html_e( 'Embeddings API Key', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
 				<td>
-					<input type="password" id="embedding_api_key" name="embedding_api_key" value="<?php echo esc_attr( $api_key ); ?>" class="regular-text" autocomplete="new-password">
+					<?php self::secret_input( 'embedding_api_key', $api_key, __( 'Paste your key', 'fahad-ai-shopping-assistant-for-woocommerce' ) ); ?>
 					<p class="description"><?php esc_html_e( 'Key for the OpenAI-compatible endpoint above. Leave blank to reuse the OpenAI key from the Provider section.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></p>
 				</td>
 			</tr>
 			<tr>
 				<th scope="row"><label for="cohere_api_key"><?php esc_html_e( 'Cohere API Key', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
-				<td><input type="password" id="cohere_api_key" name="cohere_api_key" value="<?php echo esc_attr( $cohere_key ); ?>" class="regular-text" autocomplete="new-password"></td>
+				<td><?php self::secret_input( 'cohere_api_key', $cohere_key, __( 'Paste your key', 'fahad-ai-shopping-assistant-for-woocommerce' ) ); ?></td>
 			</tr>
 			<tr>
 				<th scope="row"><label for="embedding_model"><?php esc_html_e( 'Embedding Model', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></label></th>
@@ -214,7 +238,7 @@ final class Fahad_AI_Embeddings_Admin {
 				<td>
 					<p class="description" style="margin-bottom:8px;"><?php esc_html_e( 'Advanced / very large catalogs only. Leave blank to use the built-in store (MySQL/MariaDB). When a Qdrant URL is set, the index is stored and searched there instead.', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?></p>
 					<input type="text" name="qdrant_url" value="<?php echo esc_attr( $qdrant_url ); ?>" class="regular-text" placeholder="https://your-qdrant-host:6333" style="margin-bottom:4px;"><br>
-					<input type="password" name="qdrant_key" value="<?php echo esc_attr( $qdrant_key ); ?>" class="regular-text" autocomplete="new-password" placeholder="<?php esc_attr_e( 'Qdrant API key', 'fahad-ai-shopping-assistant-for-woocommerce' ); ?>" style="margin-bottom:4px;"><br>
+					<?php self::secret_input( 'qdrant_key', $qdrant_key, __( 'Qdrant API key', 'fahad-ai-shopping-assistant-for-woocommerce' ) ); ?><br>
 					<input type="text" name="qdrant_collection" value="<?php echo esc_attr( $qdrant_col ); ?>" class="regular-text" placeholder="fahad_ai_products">
 				</td>
 			</tr>

@@ -138,4 +138,34 @@ class AuthTest extends TestCase {
 		// The original full string must NOT survive unmasked.
 		$this->assertNotSame( 'not-an-email', $masked );
 	}
+
+	// ── resolve_secret() / secret_hint(), never echo a saved key (#329) ─────────
+
+	public function test_resolve_secret_keeps_current_when_field_left_blank(): void {
+		$this->assertSame( 'sk-current', Fahad_AI_Auth::resolve_secret( '', 'sk-current' ) );
+	}
+
+	public function test_resolve_secret_replaces_with_a_new_value(): void {
+		$this->assertSame( 'sk-new', Fahad_AI_Auth::resolve_secret( 'sk-new', 'sk-current' ) );
+	}
+
+	public function test_resolve_secret_clears_only_on_explicit_flag(): void {
+		$this->assertSame( '', Fahad_AI_Auth::resolve_secret( '', 'sk-current', true ) );
+		$this->assertSame( '', Fahad_AI_Auth::resolve_secret( 'sk-new', 'sk-current', true ), 'clear wins over a pasted value' );
+	}
+
+	public function test_secret_hint_is_empty_for_no_secret(): void {
+		$this->assertSame( '', Fahad_AI_Auth::secret_hint( '' ) );
+	}
+
+	public function test_secret_hint_shows_bullets_and_last_four_only(): void {
+		$hint = Fahad_AI_Auth::secret_hint( 'sk-ant-api03-ABCDEFGHIJKLwxyz' );
+
+		$this->assertSame( str_repeat( "\u{2022}", 8 ) . 'wxyz', $hint );
+		$this->assertStringNotContainsString( 'ABCDEFGH', $hint );
+	}
+
+	public function test_secret_hint_hides_short_secrets_entirely(): void {
+		$this->assertSame( str_repeat( "\u{2022}", 8 ), Fahad_AI_Auth::secret_hint( 'short-key' ) );
+	}
 }

@@ -70,6 +70,29 @@ class EmbeddingsAdminTest extends TestCase {
 		$this->assertSame( 'co-key', $this->options[ Fahad_AI_Embeddings_Admin::OPT_COHERE_KEY ] );
 	}
 
+	public function test_save_keeps_saved_keys_when_fields_are_blank(): void {
+		// The form never echoes a secret (#329), so a blank field must not wipe it.
+		$this->options[ Fahad_AI_Embeddings_Admin::OPT_API_KEY ]    = 'sk-keep';
+		$this->options[ Fahad_AI_Embeddings_Admin::OPT_COHERE_KEY ] = 'co-keep';
+		$this->options['fahad_ai_qdrant_key']                        = 'qk-keep';
+
+		Fahad_AI_Embeddings_Admin::save( [ 'embedding_api_key' => '', 'cohere_api_key' => '' ] );
+
+		$this->assertSame( 'sk-keep', $this->options[ Fahad_AI_Embeddings_Admin::OPT_API_KEY ] );
+		$this->assertSame( 'co-keep', $this->options[ Fahad_AI_Embeddings_Admin::OPT_COHERE_KEY ] );
+		$this->assertSame( 'qk-keep', $this->options['fahad_ai_qdrant_key'] );
+	}
+
+	public function test_save_clears_a_key_only_via_the_explicit_clear_flag(): void {
+		$this->options[ Fahad_AI_Embeddings_Admin::OPT_API_KEY ] = 'sk-old';
+		$this->options['fahad_ai_qdrant_key']                     = 'qk-old';
+
+		Fahad_AI_Embeddings_Admin::save( [ 'embedding_api_key_clear' => '1', 'qdrant_key_clear' => '1' ] );
+
+		$this->assertSame( '', $this->options[ Fahad_AI_Embeddings_Admin::OPT_API_KEY ] );
+		$this->assertSame( '', $this->options['fahad_ai_qdrant_key'] );
+	}
+
 	public function test_save_persists_qdrant_settings_with_collection_default(): void {
 		Fahad_AI_Embeddings_Admin::save( [ 'qdrant_url' => 'https://q.example.com:6333', 'qdrant_key' => 'qk' ] );
 		$this->assertSame( 'https://q.example.com:6333', $this->options['fahad_ai_qdrant_url'] );

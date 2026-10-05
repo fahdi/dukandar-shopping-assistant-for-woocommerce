@@ -272,6 +272,7 @@ class CoverageEmbeddingsAdminTest extends TestCase {
 		$this->assertStringContainsString( 'name="embedding_base_url"', $html );
 		$this->assertStringContainsString( 'name="embedding_api_key"', $html );
 		$this->assertStringContainsString( 'name="cohere_api_key"', $html );
+
 		$this->assertStringContainsString( 'name="embedding_model"', $html );
 		$this->assertStringContainsString( 'name="qdrant_url"', $html );
 		$this->assertStringContainsString( 'name="qdrant_collection"', $html );
@@ -293,6 +294,24 @@ class CoverageEmbeddingsAdminTest extends TestCase {
 	}
 
 	// ── render_settings(): stale model + failures branch ─────────────────────────
+
+	public function test_render_settings_never_echoes_saved_keys(): void {
+		// Secrets are never echoed back (#329): only a hint + a clear control.
+		Functions\when( 'wc_get_products' )->justReturn( [ 1, 2 ] );
+		$this->options['fahad_ai_embedding_api_key'] = 'sk-live-secret-ABCD';
+		$this->options['fahad_ai_qdrant_key']        = 'qdrant-SECRET-KEY-9';
+
+		ob_start();
+		Fahad_AI_Embeddings_Admin::render_settings();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'sk-live-secret-ABCD', $html );
+		$this->assertStringNotContainsString( 'qdrant-SECRET-KEY', $html );
+		$this->assertStringContainsString( str_repeat( "\u{2022}", 8 ) . 'ABCD', $html );
+		$this->assertStringContainsString( 'name="embedding_api_key_clear"', $html );
+		$this->assertStringContainsString( 'name="qdrant_key_clear"', $html );
+		$this->assertStringNotContainsString( 'name="cohere_api_key_clear"', $html, 'no clear control when nothing is saved' );
+	}
 
 	public function test_render_settings_shows_stale_and_failure_notice(): void {
 		// Cohere selected + key present -> provider available with active model
