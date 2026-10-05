@@ -56,6 +56,25 @@ function fahad_ai_hide_on_checkout_enabled(): bool {
 }
 
 /**
+ * Whether the widget should appear on the CURRENT storefront request (issue #317): the
+ * master toggle (#231) is on, and the hide-on-cart/checkout option (#241) does not exclude
+ * this page. The single source of truth for BOTH render_widget() and enqueue_assets(), so
+ * the CSS/JS bundle and the localized config are never shipped to a page where the widget
+ * root is not printed (a paused assistant, or the cart/checkout pages when hidden there).
+ * The provider-key check stays in the main class (it needs the catalog), so callers combine
+ * the two: has_api_key() && fahad_ai_widget_visible().
+ */
+function fahad_ai_widget_visible(): bool {
+	if ( ! fahad_ai_widget_enabled() ) {
+		return false;
+	}
+	if ( fahad_ai_hide_on_checkout_enabled() && function_exists( 'is_cart' ) && ( is_cart() || is_checkout() ) ) {
+		return false;
+	}
+	return true;
+}
+
+/**
  * Render the WordPress dashboard widget (issue #245): the assistant's headline numbers on the
  * screen owners see on every login, last 7 days of conversations / chat-to-cart / resolution
  * plus this calendar month's AI spend, with a link to the full analytics. Reuses the existing
