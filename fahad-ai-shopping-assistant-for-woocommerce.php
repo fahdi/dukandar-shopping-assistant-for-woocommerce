@@ -402,7 +402,10 @@ final class Fahad_AI_Chatbot {
 	}
 
 	public function enqueue_assets(): void {
-		if ( ! $this->has_api_key() ) {
+		// Same gate as render_widget() (issue #317): no bundle, no localized config and no
+		// nonce on a page where the widget root is not printed (paused, or hidden on
+		// cart/checkout), so a paused assistant costs the storefront nothing.
+		if ( ! $this->has_api_key() || ! fahad_ai_widget_visible() ) {
 			return;
 		}
 
@@ -586,11 +589,9 @@ final class Fahad_AI_Chatbot {
 	}
 
 	public function render_widget(): void {
-		if ( ! $this->has_api_key() || ! fahad_ai_widget_enabled() ) {
-			return;
-		}
-		// Distraction-free checkout (#241): optionally skip the cart/checkout pages.
-		if ( fahad_ai_hide_on_checkout_enabled() && function_exists( 'is_cart' ) && ( is_cart() || is_checkout() ) ) {
+		// Master toggle (#231) + distraction-free checkout (#241), shared with enqueue_assets()
+		// via fahad_ai_widget_visible() (issue #317) so the two guards cannot drift.
+		if ( ! $this->has_api_key() || ! fahad_ai_widget_visible() ) {
 			return;
 		}
 		echo '<div id="fahad-ai-chatbot-root"></div>';
