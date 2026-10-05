@@ -440,7 +440,20 @@ final class Fahad_AI_API_Handler {
 		$payload = [
 			'model'      => $model,
 			'max_tokens' => 1024,
-			'system'     => $this->get_system_prompt(),
+			// Prompt caching (issue #318). The request prefix renders tools -> system ->
+			// messages, so ONE ephemeral breakpoint on the system block caches the whole
+			// static prefix (every tool definition + the full system prompt) and the agent
+			// loop's follow-up calls (tool iterations, next shopper turns within 5 minutes)
+			// read it at roughly a tenth of the input price instead of re-billing it in
+			// full. A prefix under the model's minimum cacheable size is silently not
+			// cached (no error), so this is safe for every configuration.
+			'system'     => [
+				[
+					'type'          => 'text',
+					'text'          => $this->get_system_prompt(),
+					'cache_control' => [ 'type' => 'ephemeral' ],
+				],
+			],
 			'tools'      => $tools,
 			'messages'   => $messages,
 		];
