@@ -225,6 +225,22 @@ final class Fahad_AI_WhatsApp {
 			return $this->ack( false );
 		}
 
+		// 3b. Replay guard (issue #327). A valid signature proves Meta signed this body
+		// ONCE; it does not prove this is the first time we see it. Anyone holding a
+		// captured delivery could otherwise replay it forever, each replay a billable
+		// agent turn plus an outbound send. Dedupe on Meta's message id; a repeat is
+		// acked (so Meta does not retry) but never processed.
+		if ( $this->seen_before( $message['id'] ) ) {
+			return $this->ack( false );
+		}
+
+		// 3c. Store-wide daily cap (#194). This channel bypasses authorize_request(), so
+		// it must apply, and count toward, the same ceiling as the web widget.
+		if ( Fahad_AI_Auth::daily_cap_reached() ) {
+			return $this->ack( false );
+		}
+		Fahad_AI_Auth::record_daily_message();
+
 		// 4. Route into the SAME agent core as a GUEST, then hand the reply to the seam.
 		// NOTE: we do NOT call wp_set_current_user, the sender is unverified, so personal
 		// tools stay blocked by Fahad_AI_Auth (identity hardening, #62).
@@ -285,7 +301,7 @@ final class Fahad_AI_WhatsApp {
 	 * without processing. Empty/whitespace-only text is treated as no message.
 	 *
 	 * @param string $raw The raw JSON request body.
-	 * @return array{from:string, text:string}|null The first text message, or null.
+	 * @return array{from:string, text:string, id:string}|null The first text message, or null.
 	 */
 	private function first_text_message( string $raw ): ?array {
 		$payload = json_decode( $raw, true );
@@ -317,12 +333,40 @@ final class Fahad_AI_WhatsApp {
 					return [
 						'from' => sanitize_text_field( $from ),
 						'text' => sanitize_textarea_field( $text ),
+						// Meta's message id (wamid.*), the replay-guard key (#327).
+						'id'   => sanitize_text_field( (string) ( $msg['id'] ?? '' ) ),
 					];
 				}
 			}
 		}
 
 		return null;
+	}
+
+	// -------------------------------------------------------------------------
+	// Replay guard (#327)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Whether this message id was already processed, remembering it for a day if not.
+	 * An empty id cannot be deduped and is processed (never silently dropped).
+	 *
+	 * @param string $message_id Meta's message id (wamid.*).
+	 */
+	private function seen_before( string $message_id ): bool {
+		if ( '' === $message_id ) {
+			return false;
+		}
+
+		$key = 'fahad_ai_wa_seen_' . md5( $message_id );
+
+		if ( get_transient( $key ) ) {
+			return true;
+		}
+
+		set_transient( $key, 1, DAY_IN_SECONDS );
+
+		return false;
 	}
 
 	// -------------------------------------------------------------------------

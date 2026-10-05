@@ -38,6 +38,10 @@ class CoverageWhatsappTest extends TestCase {
 			'sanitize_textarea_field' => fn( $s ) => is_string( $s ) ? trim( $s ) : '',
 		] );
 
+		// Replay guard (#327): no message has been seen unless a test says otherwise.
+		Functions\when( 'get_transient' )->justReturn( false );
+		Functions\when( 'set_transient' )->justReturn( true );
+
 		Functions\when( 'get_option' )->alias(
 			fn( $name, $default = false ) => $this->options[ $name ] ?? $default
 		);
