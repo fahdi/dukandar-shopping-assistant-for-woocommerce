@@ -432,6 +432,8 @@ final class Fahad_AI_Chatbot {
 			// keys off this flag rather than hardcoding a provider id.
 			'streaming'   => Fahad_AI_Providers::is_openai( get_option( 'fahad_ai_provider', 'anthropic' ) ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
+			// ?fahad_demo= auto-send is opt-in (#330): off, the widget ignores the param.
+			'demoLinks'   => fahad_ai_demo_links_enabled(),
 			'botName'     => get_option( 'fahad_ai_bot_name', __( 'Store Assistant', 'fahad-ai-shopping-assistant-for-woocommerce' ) ),
 			'greeting'    => get_option( 'fahad_ai_greeting', __( 'Hi! How can I help you today?', 'fahad-ai-shopping-assistant-for-woocommerce' ) ),
 			'accentColor' => get_option( 'fahad_ai_accent_color', '#2563eb' ),

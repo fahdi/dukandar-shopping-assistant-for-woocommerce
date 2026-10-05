@@ -652,6 +652,31 @@ class CoverageAdminSettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Track an order', $out );
 	}
 
+	// ── demo links are opt-in, default off (#330) ────────────────────────────────
+
+	public function test_demo_links_default_off(): void {
+		$this->assertFalse( fahad_ai_demo_links_enabled() );
+	}
+
+	public function test_demo_links_reflect_the_option(): void {
+		$this->options['fahad_ai_demo_links'] = 1;
+		$this->assertTrue( fahad_ai_demo_links_enabled() );
+	}
+
+	public function test_settings_save_unticked_demo_links_persists_off(): void {
+		$this->grant_cap( true );
+		Functions\when( 'check_admin_referer' )->justReturn( true );
+		$this->options['fahad_ai_demo_links'] = 1;
+		$_POST = [ 'fahad_ai_save' => '1', 'provider' => 'anthropic' ];
+
+		ob_start();
+		fahad_ai_settings_page();
+		$out = ob_get_clean();
+
+		$this->assertSame( 0, $this->options['fahad_ai_demo_links'] );
+		$this->assertStringContainsString( 'name="demo_links"', $out );
+	}
+
 	// ── fahad_ai_settings_page (full save round-trip) ────────────────────────────
 
 	public function test_settings_page_saves_all_options(): void {
@@ -693,6 +718,7 @@ class CoverageAdminSettingsTest extends TestCase {
 			'weekly_digest'         => '1',
 			'enabled'               => '1',
 			'hide_on_checkout'      => '1',
+			'demo_links'            => '1',
 			'whatsapp_enabled'      => '1',
 			'whatsapp_verify_token' => 'verify123',
 			'whatsapp_app_secret'   => 'secret456',
@@ -718,6 +744,7 @@ class CoverageAdminSettingsTest extends TestCase {
 		$this->assertSame( 250, $this->options['fahad_ai_daily_message_cap'] );
 		$this->assertSame( 75.0, $this->options['fahad_ai_monthly_budget'] );
 		$this->assertSame( 30, $this->options['fahad_ai_rate_limit'] );
+		$this->assertSame( 1, $this->options['fahad_ai_demo_links'] );
 		$this->assertSame( 50.0, $this->options['fahad_ai_free_shipping_threshold'] );
 		$this->assertSame( 100, $this->options['fahad_ai_bestseller_threshold'] );
 		$this->assertSame( '14-day returns, unopened only.', $this->options['fahad_ai_return_policy'] );

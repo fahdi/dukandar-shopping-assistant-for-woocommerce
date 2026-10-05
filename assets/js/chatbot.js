@@ -1552,7 +1552,13 @@
 	// the panel, types the question with a typewriter effect, then sends it, a
 	// hands-free live demo, e.g. a "Try the live demo" link that lands a visitor
 	// on a store with the assistant already answering. Runs once per page load.
+	// Opt-in only (#330): the owner must enable demo links, and the page must be the
+	// top-level window. Otherwise a third party could embed the store in a hidden
+	// iframe (or spray the link) and spend the owner's AI budget from every visitor's
+	// browser with a nonce the page itself minted.
 	function maybeRunDemo() {
+		if (!cfg.demoLinks || cfg.demoLinks === '0' || cfg.demoLinks === '') return;
+		try { if (window.top !== window.self) return; } catch (e) { return; }
 		const q = new URLSearchParams(window.location.search).get('fahad_demo');
 		if (q === null) return;
 		const text = (q && q !== '1') ? q
