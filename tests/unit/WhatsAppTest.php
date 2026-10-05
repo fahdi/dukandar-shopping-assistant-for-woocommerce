@@ -52,6 +52,10 @@ class WhatsAppTest extends TestCase {
 			'sanitize_textarea_field' => fn( $s ) => is_string( $s ) ? trim( $s ) : '',
 		] );
 
+		// Replay guard (#327): no message has been seen unless a test says otherwise.
+		Functions\when( 'get_transient' )->justReturn( false );
+		Functions\when( 'set_transient' )->justReturn( true );
+
 		Functions\when( 'get_option' )->alias(
 			fn( $name, $default = false ) => $this->options[ $name ] ?? $default
 		);
@@ -407,6 +411,131 @@ class WhatsAppTest extends TestCase {
 		Functions\expect( 'wp_set_current_user' )->never();
 
 		$this->whatsapp()->handle_inbound( $this->inbound_request( $raw, $sig ) );
+	}
+
+	// ── Replay protection + cost controls (issue #327) ──────────────────────────────
+
+	private function arm_happy_path(): array {
+		$this->options['fahad_ai_whatsapp_enabled']    = 1;
+		$this->options['fahad_ai_whatsapp_app_secret'] = 'app-secret';
+		$this->options['fahad_ai_anthropic_api_key']   = 'sk-ant-key';
+		$this->stub_agent_reply( 'Sure.' );
+
+		$payload = $this->text_payload( '15551234567', 'hello' );
+		$raw     = json_encode( $payload );
+		return [ $raw, $this->sign( $raw, 'app-secret' ) ];
+	}
+
+	public function test_replayed_delivery_is_acked_but_not_processed(): void {
+		// A captured, correctly-signed body replayed later must not trigger a second
+		// (billable) agent turn or a second outbound send. The guard is keyed on Meta's
+		// message id and remembered in a transient.
+		[ $raw, $sig ] = $this->arm_happy_path();
+
+		$seen = [];
+		Functions\when( 'get_transient' )->alias( function ( $k ) use ( &$seen ) {
+			return $seen[ $k ] ?? false;
+		} );
+		Functions\when( 'set_transient' )->alias( function ( $k, $v, $ttl ) use ( &$seen ) {
+			$seen[ $k ] = $v;
+			return true;
+		} );
+
+		$sends = 0;
+		Functions\when( 'apply_filters' )->alias( function ( $hook, $value = null ) use ( &$sends ) {
+			if ( 'fahad_ai_whatsapp_send' === $hook ) {
+				$sends++;
+				return [ 'sent' => true ];
+			}
+			return $value;
+		} );
+
+		$first  = $this->whatsapp()->handle_inbound( $this->inbound_request( $raw, $sig ) );
+		$second = $this->whatsapp()->handle_inbound( $this->inbound_request( $raw, $sig ) );
+
+		$this->assertSame( 1, $sends, 'The replay must not reach the send seam.' );
+		$this->assertTrue( $first->get_data()['sent'] );
+		$this->assertFalse( $second->get_data()['sent'] );
+		$this->assertSame( 200, $second->get_status(), 'Replays are still acked so Meta does not retry.' );
+		$this->assertCount( 1, $seen, 'Exactly one dedupe key is recorded.' );
+	}
+
+	public function test_dedupe_key_is_bound_to_the_message_id(): void {
+		[ $raw, $sig ] = $this->arm_happy_path();
+
+		$keys = [];
+		Functions\when( 'set_transient' )->alias( function ( $k, $v, $ttl ) use ( &$keys ) {
+			$keys[] = [ $k, $ttl ];
+			return true;
+		} );
+
+		$this->whatsapp()->handle_inbound( $this->inbound_request( $raw, $sig ) );
+
+		$this->assertCount( 1, $keys );
+		$this->assertSame( 'fahad_ai_wa_seen_' . md5( 'wamid.TEST' ), $keys[0][0] );
+		$this->assertSame( DAY_IN_SECONDS, $keys[0][1] );
+	}
+
+	public function test_inbound_is_refused_when_the_daily_cap_is_reached(): void {
+		// The WhatsApp channel must honour the same store-wide daily ceiling (#194) as
+		// the web widget: at the cap, ack without running the agent or sending.
+		[ $raw, $sig ] = $this->arm_happy_path();
+		$this->options['fahad_ai_daily_message_cap'] = 5;
+		$this->options['fahad_ai_daily_count']       = [ 'date' => gmdate( 'Ymd' ), 'count' => 5 ];
+
+		$sends = 0;
+		Functions\when( 'apply_filters' )->alias( function ( $hook, $value = null ) use ( &$sends ) {
+			if ( 'fahad_ai_whatsapp_send' === $hook ) {
+				$sends++;
+			}
+			return $value;
+		} );
+
+		$response = $this->whatsapp()->handle_inbound( $this->inbound_request( $raw, $sig ) );
+
+		$this->assertSame( 0, $sends );
+		$this->assertFalse( $response->get_data()['sent'] );
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	public function test_inbound_counts_toward_the_daily_total(): void {
+		[ $raw, $sig ] = $this->arm_happy_path();
+
+		$written = [];
+		Functions\when( 'update_option' )->alias( function ( $name, $value ) use ( &$written ) {
+			$written[ $name ] = $value;
+			return true;
+		} );
+
+		$this->whatsapp()->handle_inbound( $this->inbound_request( $raw, $sig ) );
+
+		$this->assertSame( 1, $written['fahad_ai_daily_count']['count'] ?? null, 'A processed WhatsApp turn is a billable turn.' );
+	}
+
+	public function test_message_without_an_id_is_still_processed_once(): void {
+		// Defensive: a payload with no message id cannot be deduped, so it is processed
+		// (never silently dropped) and no dedupe key is written.
+		$this->options['fahad_ai_whatsapp_enabled']    = 1;
+		$this->options['fahad_ai_whatsapp_app_secret'] = 'app-secret';
+		$this->options['fahad_ai_anthropic_api_key']   = 'sk-ant-key';
+		$this->stub_agent_reply( 'Sure.' );
+
+		$payload = $this->text_payload( '15551234567', 'hello' );
+		unset( $payload['entry'][0]['changes'][0]['value']['messages'][0]['id'] );
+		$raw = json_encode( $payload );
+		$sig = $this->sign( $raw, 'app-secret' );
+
+		$keys = 0;
+		Functions\when( 'set_transient' )->alias( function () use ( &$keys ) {
+			$keys++;
+			return true;
+		} );
+		Functions\when( 'apply_filters' )->alias( fn( $hook, $value = null ) => 'fahad_ai_whatsapp_send' === $hook ? [ 'sent' => true ] : $value );
+
+		$response = $this->whatsapp()->handle_inbound( $this->inbound_request( $raw, $sig ) );
+
+		$this->assertTrue( $response->get_data()['sent'] );
+		$this->assertSame( 0, $keys );
 	}
 
 	// ── Robustness: a signed-but-non-text/empty payload is acked without a send ─────
